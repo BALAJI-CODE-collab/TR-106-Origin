@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+
+# Data and artifacts
+data/
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
