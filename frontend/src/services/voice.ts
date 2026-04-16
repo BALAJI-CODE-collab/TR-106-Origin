@@ -17,9 +17,79 @@ interface VoiceServiceConfig {
 
 class VoiceService {
   private recognition: any;
-  private synthesis: SpeechSynthesisUtterance | null = null;
   private isListening: boolean = false;
   private currentLanguage: string = 'ta-IN';
+
+  private findBestTamilVoice(): SpeechSynthesisVoice | null {
+    if (!window.speechSynthesis) {
+      return null;
+    }
+
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) {
+      return null;
+    }
+
+    const exactMatch = voices.find((voice) => voice.lang?.toLowerCase() === 'ta-in');
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    const tamilMatch = voices.find((voice) => voice.lang?.toLowerCase().startsWith('ta'));
+    if (tamilMatch) {
+      return tamilMatch;
+    }
+
+    return null;
+  }
+
+  private chunkSpeechText(text: string, maxLen: number = 140): string[] {
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+    if (!cleaned) {
+      return [];
+    }
+
+    const sentences = cleaned.split(/(?<=[.!?])\s+/);
+    const chunks: string[] = [];
+    let current = '';
+
+    for (const sentence of sentences) {
+      if (!sentence) {
+        continue;
+      }
+      const candidate = current ? `${current} ${sentence}` : sentence;
+      if (candidate.length <= maxLen) {
+        current = candidate;
+      } else {
+        if (current) {
+          chunks.push(current);
+        }
+        if (sentence.length <= maxLen) {
+          current = sentence;
+        } else {
+          const words = sentence.split(' ');
+          let part = '';
+          for (const word of words) {
+            const next = part ? `${part} ${word}` : word;
+            if (next.length <= maxLen) {
+              part = next;
+            } else {
+              if (part) {
+                chunks.push(part);
+              }
+              part = word;
+            }
+          }
+          current = part;
+        }
+      }
+    }
+
+    if (current) {
+      chunks.push(current);
+    }
+    return chunks;
+  }
 
   constructor(config?: VoiceServiceConfig) {
     // Initialize Web Speech API
@@ -29,7 +99,7 @@ class VoiceService {
       this.recognition = new SpeechRecognition();
       this.recognition.continuous = config?.continuous || false;
       this.recognition.interimResults = config?.interimResults || true;
-      this.recognition.language = config?.language || this.currentLanguage;
+      this.recognition.lang = config?.language || this.currentLanguage;
     } else {
       console.warn('Speech Recognition not supported in this browser');
     }
@@ -109,24 +179,69 @@ class VoiceService {
   speak(text: string, language: string = this.currentLanguage, rate: number = 1.0): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!window.speechSynthesis) {
+        console.warn('Text-to-Speech not available');
         reject('Text-to-Speech not available');
         return;
       }
 
-      // Cancel any ongoing speech
+      // Cancel any ongoing speech first
       window.speechSynthesis.cancel();
+      
+      // Small delay to ensure cancel completes
+      setTimeout(() => {
+        try {
+          const chunks = this.chunkSpeechText(text);
+          if (!chunks.length) {
+            resolve();
+            return;
+          }
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.language = language;
-      utterance.rate = rate;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
+          const tamilVoice = language.toLowerCase().startsWith('ta') ? this.findBestTamilVoice() : null;
+          const normalizedRate = Math.min(Math.max(rate, 0.5), 2.0);
+          const resumeTimer = window.setInterval(() => {
+            // Some browsers pause long utterances; periodic resume keeps playback continuous.
+            window.speechSynthesis.resume();
+          }, 250);
 
-      utterance.onend = () => resolve();
-      utterance.onerror = (event) => reject(`Speech synthesis error: ${event.error}`);
+          let index = 0;
+          const speakNext = () => {
+            if (index >= chunks.length) {
+              window.clearInterval(resumeTimer);
+              resolve();
+              return;
+            }
 
-      window.speechSynthesis.speak(utterance);
-      this.synthesis = utterance;
+            const utterance = new SpeechSynthesisUtterance(chunks[index]);
+            utterance.lang = language;
+            utterance.rate = normalizedRate;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            if (tamilVoice) {
+              utterance.voice = tamilVoice;
+            }
+
+            utterance.onstart = () => {
+              console.log('Speech synthesis started', { language, rate: normalizedRate, chunk: index + 1, total: chunks.length });
+            };
+            utterance.onend = () => {
+              index += 1;
+              speakNext();
+            };
+            utterance.onerror = (event) => {
+              console.error('Speech synthesis error:', event.error, event);
+              window.clearInterval(resumeTimer);
+              reject(`Speech synthesis error: ${event.error}`);
+            };
+
+            window.speechSynthesis.speak(utterance);
+          };
+
+          speakNext();
+        } catch (err) {
+          console.error('Error creating speech utterance:', err);
+          reject(err);
+        }
+      }, 100);
     });
   }
 
@@ -136,7 +251,7 @@ class VoiceService {
   setLanguage(language: string): void {
     this.currentLanguage = language;
     if (this.recognition) {
-      this.recognition.language = language;
+      this.recognition.lang = language;
     }
   }
 

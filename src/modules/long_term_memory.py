@@ -8,6 +8,8 @@ from typing import List
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+from src.security import DataProtector
+
 
 @dataclass
 class MemoryItem:
@@ -24,15 +26,27 @@ class LongTermMemory:
     def __init__(self, db_path: str = "data/memory_db.json") -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.protector = DataProtector()
         if not self.db_path.exists():
             self.db_path.write_text("[]", encoding="utf-8")
 
     def _load(self) -> List[MemoryItem]:
         payload = json.loads(self.db_path.read_text(encoding="utf-8"))
-        return [MemoryItem(**item) for item in payload]
+        output: List[MemoryItem] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            decoded = dict(item)
+            decoded["text"] = self.protector.decrypt_text(decoded.get("text", ""))
+            output.append(MemoryItem(**decoded))
+        return output
 
     def _save(self, items: List[MemoryItem]) -> None:
-        serialized = [asdict(item) for item in items]
+        serialized = []
+        for item in items:
+            payload = asdict(item)
+            payload["text"] = self.protector.encrypt_text(payload["text"])
+            serialized.append(payload)
         self.db_path.write_text(json.dumps(serialized, indent=2), encoding="utf-8")
 
     def store_fact(self, user_id: str, text: str, kind: str = "fact") -> None:

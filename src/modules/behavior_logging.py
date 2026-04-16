@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
+from src.security import DataProtector
+
 
 @dataclass
 class BehaviorLogRecord:
@@ -30,10 +32,14 @@ class BehaviorLogger:
         self.log_path = Path(log_path)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.log_path.touch(exist_ok=True)
+        self.protector = DataProtector()
 
     def log_interaction(self, record: BehaviorLogRecord) -> None:
+        payload = asdict(record)
+        payload["user_text"] = self.protector.encrypt_text(payload["user_text"])
+        payload["bot_response"] = self.protector.encrypt_text(payload["bot_response"])
         with self.log_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(asdict(record)) + "\n")
+            handle.write(json.dumps(payload) + "\n")
 
     def read_logs(self, user_id: str | None = None) -> List[BehaviorLogRecord]:
         output: List[BehaviorLogRecord] = []
@@ -45,6 +51,8 @@ class BehaviorLogger:
                 payload = json.loads(line)
                 if user_id is not None and payload["user_id"] != user_id:
                     continue
+                payload["user_text"] = self.protector.decrypt_text(payload.get("user_text", ""))
+                payload["bot_response"] = self.protector.decrypt_text(payload.get("bot_response", ""))
                 output.append(BehaviorLogRecord(**payload))
         return output
 

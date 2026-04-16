@@ -23,6 +23,8 @@ class SelfAttentionResult:
 
     focus_terms: List[str]
     focus_score: float
+    urgency_score: float
+    risk_terms: List[str]
 
 
 @dataclass
@@ -46,11 +48,28 @@ class SelfAttention:
     """Computes lightweight self-attention over words to find salient terms."""
 
     TOKEN_RE = re.compile(r"[a-zA-Z']+")
+    RISK_TERMS = {
+        "help",
+        "emergency",
+        "fall",
+        "pain",
+        "dizzy",
+        "chest",
+        "breath",
+        "fainted",
+        "confused",
+        "lost",
+    }
 
     def analyze(self, text: str, emotion_label: str) -> SelfAttentionResult:
         tokens = [t.lower() for t in self.TOKEN_RE.findall(text)]
         if not tokens:
-            return SelfAttentionResult(focus_terms=[], focus_score=0.0)
+            return SelfAttentionResult(
+                focus_terms=[],
+                focus_score=0.0,
+                urgency_score=0.0,
+                risk_terms=[],
+            )
 
         tf: Dict[str, int] = {}
         for token in tokens:
@@ -66,7 +85,19 @@ class SelfAttention:
         norm = max(1.0, len(tokens))
         focus_score = float(min(1.0, max_score / norm * 2.5))
 
-        return SelfAttentionResult(focus_terms=top_terms, focus_score=focus_score)
+        risk_terms = sorted({token for token in tokens if token in self.RISK_TERMS})
+        urgency_score = min(
+            1.0,
+            (len(risk_terms) / 3.0)
+            + (0.2 if emotion_label in {"anxious", "sad"} else 0.0),
+        )
+
+        return SelfAttentionResult(
+            focus_terms=top_terms,
+            focus_score=focus_score,
+            urgency_score=float(urgency_score),
+            risk_terms=risk_terms,
+        )
 
 
 class TemporalAttention:
@@ -117,6 +148,9 @@ class MultiModalAttention:
         behavior_risk: float,
         memory_strength: float,
         speech_strength: float,
+        focus_score: float = 0.0,
+        urgency_score: float = 0.0,
+        disease_intent: str = "none",
     ) -> MultiModalAttentionResult:
         # Weighted late fusion for explainable cross-modal decisioning.
         modality_scores = {
@@ -125,18 +159,27 @@ class MultiModalAttention:
             "behavior": float(max(0.0, min(1.0, behavior_risk))),
             "memory": float(max(0.0, min(1.0, memory_strength))),
             "temporal": float(max(0.0, min(1.0, temporal_risk))),
+            "focus": float(max(0.0, min(1.0, focus_score))),
+            "urgency": float(max(0.0, min(1.0, urgency_score))),
         }
 
         fused_risk = (
-            modality_scores["emotion"] * 0.22
+            modality_scores["emotion"] * 0.20
             + modality_scores["speech"] * 0.08
-            + modality_scores["behavior"] * 0.30
-            + modality_scores["memory"] * 0.12
-            + modality_scores["temporal"] * 0.28
+            + modality_scores["behavior"] * 0.27
+            + modality_scores["memory"] * 0.11
+            + modality_scores["temporal"] * 0.24
+            + modality_scores["focus"] * 0.05
+            + modality_scores["urgency"] * 0.05
         )
 
+        if disease_intent in {"alzheimer", "parkinson"}:
+            fused_risk = min(1.0, fused_risk + 0.04)
+
         recommendation = "normal_response"
-        if fused_risk >= 0.72:
+        if modality_scores["urgency"] >= 0.75:
+            recommendation = "alert_caregiver"
+        elif fused_risk >= 0.72:
             recommendation = "alert_caregiver"
         elif fused_risk >= 0.5:
             recommendation = "supportive_followup"

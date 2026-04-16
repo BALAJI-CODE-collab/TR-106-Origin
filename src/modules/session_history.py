@@ -5,6 +5,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, List
 
+from src.security import DataProtector
+
 
 @dataclass
 class SessionTurn:
@@ -24,6 +26,7 @@ class SessionHistoryStore:
     def __init__(self, history_path: str = "data/session_history.json") -> None:
         self.history_path = Path(history_path)
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
+        self.protector = DataProtector()
         if not self.history_path.exists():
             self.history_path.write_text(json.dumps({"sessions": {}}, indent=2), encoding="utf-8")
 
@@ -46,7 +49,10 @@ class SessionHistoryStore:
             sessions[key] = []
             turns = sessions[key]
 
-        turns.append(asdict(turn))
+        encoded_turn = asdict(turn)
+        encoded_turn["user_text"] = self.protector.encrypt_text(encoded_turn["user_text"])
+        encoded_turn["assistant_text"] = self.protector.encrypt_text(encoded_turn["assistant_text"])
+        turns.append(encoded_turn)
         self._save(payload)
 
     def get_session(self, user_id: str, session_id: str) -> List[SessionTurn]:
@@ -59,4 +65,41 @@ class SessionHistoryStore:
         turns = sessions.get(key, [])
         if not isinstance(turns, list):
             return []
-        return [SessionTurn(**turn) for turn in turns if isinstance(turn, dict)]
+        output: List[SessionTurn] = []
+        for turn in turns:
+            if not isinstance(turn, dict):
+                continue
+            decoded = dict(turn)
+            decoded["user_text"] = self.protector.decrypt_text(decoded.get("user_text", ""))
+            decoded["assistant_text"] = self.protector.decrypt_text(decoded.get("assistant_text", ""))
+            output.append(SessionTurn(**decoded))
+        return output
+
+    def get_session_history(self, user_id: str) -> List[SessionTurn]:
+        """Return all turns for a user across all sessions in chronological order."""
+        payload = self._load()
+        sessions = payload.get("sessions", {})
+        if not isinstance(sessions, dict):
+            return []
+
+        output: List[SessionTurn] = []
+        prefix = f"{user_id}:"
+        for key, turns in sessions.items():
+            if not isinstance(key, str) or not key.startswith(prefix):
+                continue
+            if not isinstance(turns, list):
+                continue
+
+            for turn in turns:
+                if not isinstance(turn, dict):
+                    continue
+                decoded = dict(turn)
+                decoded["user_text"] = self.protector.decrypt_text(decoded.get("user_text", ""))
+                decoded["assistant_text"] = self.protector.decrypt_text(decoded.get("assistant_text", ""))
+                try:
+                    output.append(SessionTurn(**decoded))
+                except TypeError:
+                    continue
+
+        output.sort(key=lambda item: item.timestamp)
+        return output

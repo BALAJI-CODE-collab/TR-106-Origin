@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import re
+import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -56,19 +57,24 @@ class DecisionEngine:
         self.temporal_attention = TemporalAttention()
         self.multi_modal_attention = MultiModalAttention()
 
-    def _adapt_tone(self, base_response: str, emotion_label: str) -> str:
+    def _adapt_tone(self, base_response: str, emotion_label: str, language: str = 'ta') -> str:
+        use_tamil = language == 'ta'
         if emotion_label == "sad":
+            if use_tamil:
+                return f"நான் உங்களுடன் இருக்கிறேன். {base_response}"
             return f"I am here with you. {base_response}"
         if emotion_label == "anxious":
+            if use_tamil:
+                return f"நாம் மெதுவாக ஒரு மூச்சை எடுப்போம். {base_response}"
             return f"Take a slow breath with me. {base_response}"
-        if emotion_label == "happy":
-            return f"That is lovely to hear. {base_response}"
         return base_response
 
-    def _compose_memory_context(self, memories: List[MemoryItem]) -> str:
+    def _compose_memory_context(self, memories: List[MemoryItem], language: str = 'ta') -> str:
         if not memories:
             return ""
         snippets = "; ".join(item.text for item in memories[:2])
+        if language == 'ta':
+            return f" எனக்கு நினைவில் உள்ளது: {snippets}."
         return f" I remember: {snippets}."
 
     def _base_chatbot_response(self, user_text: str) -> str:
@@ -86,9 +92,14 @@ class DecisionEngine:
     def _contains_any(self, text: str, words: List[str]) -> bool:
         return any(word in text for word in words)
 
-    def _companion_response(self, user_text: str, user_id: str, now: datetime) -> str:
+    def _choose(self, options: List[str]) -> str:
+        return random.choice(options) if options else ""
+
+    def _companion_response(self, user_text: str, user_id: str, now: datetime, language: str = 'ta') -> str:
         lowered = user_text.lower().strip()
         compact = re.sub(r"\s+", " ", lowered)
+        tamil_mode = any("\u0b80" <= ch <= "\u0bff" for ch in user_text)
+        use_tamil = language == 'ta' or tamil_mode
 
         greetings = ["hi", "hello", "hey", "good morning", "good evening"]
         wellbeing = ["how are you", "how do you feel", "are you there"]
@@ -100,64 +111,129 @@ class DecisionEngine:
         emotion = ["sad", "anxious", "worried", "lonely", "upset", "afraid", "stress"]
         memory = ["forgot", "remember", "memory", "confused", "forget"]
         family = ["daughter", "son", "family", "grandchild", "friend", "visit"]
-        safety = ["help", "emergency", "fall", "pain", "dizzy", "chest pain", "ambulance"]
+        safety = ["emergency", "fall", "severe pain", "dizzy", "chest pain", "ambulance", "breathless"]
         prayer = ["pray", "prayer", "spiritual", "god", "meditation"]
         fun = ["joke", "story", "song", "motivate", "motivation"]
 
         if self._contains_any(compact, safety):
+            if use_tamil:
+                return (
+                    "உங்கள் பாதுகாப்பு முதலில். இது அவசரமாக இருந்தால் உடனே பராமரிப்பாளர் அல்லது அவசர சேவையை தொடர்பு கொள்ளுங்கள். "
+                    "நான் உங்களுடன் இருந்து அடுத்த படியை அமைதியாகச் செய்வேன்."
+                )
             return (
                 "Your safety comes first. If this feels urgent or severe, please contact a caregiver or emergency services now. "
                 "I can stay with you while we do the next step calmly."
             )
 
         if self._contains_any(compact, greetings):
-            return "I am here with you. Tell me what you need right now, and we will do it together step by step."
+            if use_tamil:
+                return self._choose([
+                    "நான் உங்களுடன் இருக்கிறேன். இப்போது என்ன உதவி வேண்டும் என்று சொல்லுங்கள், படிப்படியாக செய்து விடலாம்.",
+                    "வணக்கம். நான் உங்களுக்கு தயார். இன்று எந்த விஷயத்தில் உதவி வேண்டும்?",
+                    "நான் இங்கே இருக்கிறேன். இப்போது நாம் சேர்ந்து எதை தொடங்கலாம்?",
+                ])
+            return self._choose([
+                "I am here with you. Tell me what you need right now, and we will do it together step by step.",
+                "Hello. I am ready to help. What would you like to do first today?",
+                "I am here for you. Tell me one thing you want help with right now.",
+            ])
 
         if self._contains_any(compact, wellbeing):
-            return "I am fully available for you. We can check your mood, schedule, reminders, or just have a friendly conversation."
+            if use_tamil:
+                return self._choose([
+                    "நான் முழுமையாக உங்களுக்காக இருக்கிறேன். மனநிலை, அட்டவணை, நினைவூட்டல் அல்லது சும்மா உரையாடல் எதுவாக இருந்தாலும் பேசலாம்.",
+                    "நான் நன்றாக இருக்கிறேன், நன்றி. நீங்கள் எப்படி உணருகிறீர்கள்? இன்று உங்கள் அட்டவணையையும் பார்க்கலாம்.",
+                    "நான் கவனமாக கேட்கிறேன். உங்களுக்கு இப்போது மனநிலை ஆதரவு வேண்டுமா அல்லது நினைவூட்டல் உதவி வேண்டுமா?",
+                ])
+            return self._choose([
+                "I am fully available for you. We can check your mood, schedule, reminders, or just have a friendly conversation.",
+                "Thank you for asking. I am here and ready to support you. How are you feeling right now?",
+                "I am with you. Would you like mood support, reminders, or a simple chat?",
+            ])
 
         if self._contains_any(compact, schedule):
             upcoming = self.schedule.get_upcoming_items(user_id=user_id, now=now)
             if upcoming:
                 first = upcoming[0]
+                if use_tamil:
+                    return f"உங்களின் அடுத்த செயல் {first.title}, நேரம் {first.time}. இன்று மீதமுள்ள அட்டவணையையும் சொல்வேனா?"
                 return f"Your next plan is {first.title} at {first.time}. Would you like me to walk you through the rest of your day?"
+            if use_tamil:
+                return "இப்போது அட்டவணையில் உருப்படி இல்லை. இன்றைக்கான நினைவூட்டலை சேர்க்க உதவவா?"
             return "I do not see a scheduled item right now. Would you like me to help create a reminder for today?"
 
         if self._contains_any(compact, medication):
-            return "Let us handle medicines carefully. I can remind you on time and we can confirm each dose together."
+            if use_tamil:
+                return self._choose([
+                    "மருந்தை கவனமாக எடுத்துக்கொள்ளலாம். நேரத்திற்கு நினைவூட்டியும், எடுத்ததை உறுதிப்படுத்தியும் உதவுகிறேன்.",
+                    "சரி, மருந்து நேரத்தை பார்க்கலாம். எந்த மாத்திரை எடுத்தீர்கள் என்று சேர்த்து பதிவு செய்யலாம்.",
+                    "நான் மருந்து மேலாண்மையில் உதவுவேன். நேரம் வந்தால் உடனே நினைவூட்டுவேன்.",
+                ])
+            return self._choose([
+                "Let us handle medicines carefully. I can remind you on time and we can confirm each dose together.",
+                "Sure, let us review your medication timing and mark what is already taken.",
+                "I can help manage your medicines with reminders and simple confirmations.",
+            ])
 
         if self._contains_any(compact, food):
+            if use_tamil:
+                return "இன்றைக்கு உணவை எளிதாகவும் சீராகவும் வைத்துக்கொள்வோம். தண்ணீர், உணவு, மருந்து நேரங்களை நினைவூட்ட உதவுவேன்."
             return "For today, let us keep meals simple, light, and regular. I can remind you for water, meals, and medication timing."
 
         if self._contains_any(compact, exercise):
+            if use_tamil:
+                return "சிறியவும் பாதுகாப்பானதும் ஒரு பயிற்சி மிகவும் உதவும். மெதுவான நீட்டிப்புகள் அல்லது சின்ன நடைப்பயிற்சியுடன் தொடங்கலாம்."
             return "A short, safe routine helps a lot. We can start with gentle stretches and a brief walk if you feel comfortable."
 
         if self._contains_any(compact, sleep):
+            if use_tamil:
+                return "நன்றாக உறங்க, அமைதியான பழக்கத்தை வைத்துக்கொள்வோம்: லேசான இரவு உணவு, குறைவான திரை நேரம், படுக்கும் முன் சில ஆழ்ந்த மூச்சுகள்."
             return "For better sleep, let us keep a calm routine: light dinner, less screen time, and a short breathing exercise before bed."
 
         if self._contains_any(compact, emotion):
+            if use_tamil:
+                return "பகிர்ந்ததற்கு நன்றி. நாமொரு மெதுவான மூச்சை எடுத்துக்கொள்வோம். நான் உங்களுக்கு உதவ இருக்கிறேன்."
             return "Thank you for sharing that. Let us take one slow breath together. I am here to support you and we can go one small step at a time."
 
         if self._contains_any(compact, memory):
+            if use_tamil:
+                return "பரவாயில்லை, நினைவிழப்பு சில நேரங்களில் நடக்கும். முக்கிய விஷயங்களை மீண்டும் சொல்லி, எளிய தினசரி பட்டியலை வைத்துக்கொள்வோம்."
             return "No problem, memory slips happen. I can repeat important points, set reminders, and keep a simple daily checklist for you."
 
         if self._contains_any(compact, family):
+            if use_tamil:
+                return "அது மிக முக்கியமானது. குடும்பத்துடன் பேசுவதற்கு முன் ஒரு நினைவூட்டலை அமைத்து, நீங்கள் சிரமமில்லாமல் தயாராக இருக்க உதவுவேன்."
             return "That sounds meaningful. I can help you prepare a reminder before your family call or visit so you feel ready and relaxed."
 
         if self._contains_any(compact, prayer):
+            if use_tamil:
+                return "அது ஒரு அமைதியான தேர்வு. விருப்பமிருந்தால் இப்போது சில நிமிடங்கள் மூச்சு, தியானம், அல்லது பிரார்த்தனைக்கு எடுத்துக்கொள்வோம்."
             return "That is a peaceful choice. We can take a quiet minute now for breathing, reflection, or prayer if you like."
 
         if self._contains_any(compact, fun):
+            if use_tamil:
+                return "மனம் சுறுசுறுப்பாகவும் மகிழ்ச்சியாகவும் இருக்கலாம். சிறிய நினைவாற்றல் விளையாட்டு அல்லது ஒரு ஊக்கமளிக்கும் செய்தியை சொல்லவா?"
             return "Let us keep your mind active and cheerful. I can start a light memory game or share a short motivational thought."
 
         if compact.endswith("?") or self._contains_any(compact, ["what", "why", "how", "when", "where"]):
+            if use_tamil:
+                return "அது நல்ல கேள்வி. தெளிவாகவும் எளிமையாகவும் பதில் சொல்கிறேன், தேவைப்பட்டால் சிறிய படிகளாக உடைத்துச் செய்வோம்."
             return (
                 "That is a thoughtful question. I will help with a clear and simple answer, and if needed, we can break it into small steps together."
             )
 
-        return (
-            "I understand. I am your daily companion, and I can help with reminders, mood support, health routines, and conversation anytime."
-        )
+        if use_tamil:
+            return self._choose([
+                "நான் உங்கள் தினசரி துணை. நினைவூட்டல், மனநிலை ஆதரவு, ஆரோக்கிய பழக்கம் மற்றும் உரையாடலில் எப்போதும் உதவுவேன்.",
+                "நான் உங்களுடன் தொடர்ச்சியாக இருக்கிறேன். நாம் ஒரு விஷயத்தை தேர்வு செய்து இப்போது தொடங்கலாம்.",
+                "நீங்கள் சொல்வதனை அடிப்படையாக வைத்து தனிப்பட்ட உதவி தருவேன். அடுத்தது என்ன செய்யலாம்?",
+            ])
+        return self._choose([
+            "I understand. I am your daily companion, and I can help with reminders, mood support, health routines, and conversation anytime.",
+            "I am with you. We can take one practical step now based on what you need.",
+            "I am ready to help in a personal way. Tell me what matters most right now.",
+        ])
 
     def _detect_disease_intent(self, user_text: str) -> str:
         lowered = user_text.lower()
@@ -224,21 +300,37 @@ class DecisionEngine:
     ) -> DecisionOutput:
         started = time.perf_counter()
         current_time = now or datetime.now(timezone.utc)
+        language = (cognitive_data or {}).get('language', 'ta')
 
         emotion = self.emotion_detector.detect(user_text)
         self_attention = self.self_attention.analyze(user_text, emotion.label)
         memories = self.memory.retrieve_relevant(user_id=user_id, query=user_text, top_k=3)
         upcoming_items = self.schedule.get_upcoming_items(user_id=user_id, now=current_time)
 
-        response_seed = base_chatbot_response or self._companion_response(user_text, user_id, current_time)
-        enriched = self._adapt_tone(response_seed, emotion.label)
-        enriched += self._compose_memory_context(memories)
-        if upcoming_items:
+        uses_external_llm = bool(base_chatbot_response)
+
+        if uses_external_llm:
+            response_seed = base_chatbot_response
+        elif language == 'ta':
+            response_seed = self._companion_response(user_text, user_id, current_time, language=language)
+        else:
+            response_seed = self._companion_response(user_text, user_id, current_time, language=language)
+        if uses_external_llm:
+            # Keep cloud LLM replies clean and input-focused.
+            enriched = response_seed
+        else:
+            enriched = self._adapt_tone(response_seed, emotion.label, language=language)
+            enriched += self._compose_memory_context(memories, language=language)
+
+        if upcoming_items and not uses_external_llm:
             first_item = upcoming_items[0]
-            enriched += (
-                f" Upcoming {first_item.category[:-1]} at {first_item.time}:"
-                f" {first_item.title}."
-            )
+            if language == 'ta':
+                enriched += f" அடுத்த {first_item.category[:-1]} நேரம் {first_item.time}: {first_item.title}."
+            else:
+                enriched += (
+                    f" Upcoming {first_item.category[:-1]} at {first_item.time}:"
+                    f" {first_item.title}."
+                )
 
         self.memory.store_conversation(user_id=user_id, text=user_text)
 
@@ -281,41 +373,62 @@ class DecisionEngine:
         behavior_risk = 1.0 if anomaly.is_anomaly else 0.25
         memory_strength = min(1.0, len(memories) / 3.0)
         speech_strength = min(1.0, max(0.0, len(user_text.strip()) / 60.0))
+        disease_intent = self._detect_disease_intent(user_text)
         attention_fusion: MultiModalAttentionResult = self.multi_modal_attention.fuse(
             emotion_score=abs(emotion.score),
             temporal_risk=temporal_attention.weighted_risk,
             behavior_risk=behavior_risk,
             memory_strength=memory_strength,
             speech_strength=speech_strength,
+            focus_score=self_attention.focus_score,
+            urgency_score=self_attention.urgency_score,
+            disease_intent=disease_intent,
         )
 
-        if attention_fusion.recommendation == "supportive_followup":
-            enriched += " Would you like me to stay with you and talk a little more?"
+        if attention_fusion.recommendation == "supportive_followup" and not uses_external_llm:
+            if language == 'ta':
+                enriched += " நான் இன்னும் கொஞ்சம் உங்களுடன் இருந்து பேசவா?"
+            else:
+                enriched += " Would you like me to stay with you and talk a little more?"
         elif attention_fusion.recommendation == "alert_caregiver":
             if not anomaly.is_anomaly:
                 anomaly.is_anomaly = True
                 anomaly.reasons.append("Multi-modal attention flagged elevated risk")
 
         alzheimer_risk = safe_evaluate_alzheimer(user_text, cognitive_data or {})
-        disease_intent = self._detect_disease_intent(user_text)
         parkinson_risk = self._evaluate_parkinson_proxy(user_text, cognitive_data)
 
-        if disease_intent == "alzheimer":
+        if disease_intent == "alzheimer" and not uses_external_llm:
             if alzheimer_risk.get("ok") and alzheimer_risk.get("risk_score"):
                 risk = alzheimer_risk["risk_score"]
+                if language == 'ta':
+                    enriched += (
+                        f" அல்சைமர் மதிப்பீட்டில் {risk.get('risk_level', 'unknown')} அளவு ஆபத்து "
+                        f"காணப்படுகிறது. மதிப்பெண் {risk.get('risk_score', 'n/a')}."
+                    )
+                else:
+                    enriched += (
+                        f" Alzheimer screening indicates {risk.get('risk_level', 'unknown')} risk "
+                        f"with score {risk.get('risk_score', 'n/a')}."
+                    )
+            else:
+                if language == 'ta':
+                    enriched += " இப்போது அல்சைமர் மதிப்பீட்டை முடிக்க முடியவில்லை."
+                else:
+                    enriched += " I could not complete Alzheimer screening right now."
+
+        if disease_intent == "parkinson" and not uses_external_llm:
+            risk = parkinson_risk["risk_score"]
+            if language == 'ta':
                 enriched += (
-                    f" Alzheimer screening indicates {risk.get('risk_level', 'unknown')} risk "
-                    f"with score {risk.get('risk_score', 'n/a')}."
+                    f" பார்கின்சன் மதிப்பீட்டில் {risk.get('risk_level', 'unknown')} அளவு ஆபத்து "
+                    f"காணப்படுகிறது. மதிப்பெண் {risk.get('risk_score', 'n/a')}."
                 )
             else:
-                enriched += " I could not complete Alzheimer screening right now."
-
-        if disease_intent == "parkinson":
-            risk = parkinson_risk["risk_score"]
-            enriched += (
-                f" Parkinson screening indicates {risk.get('risk_level', 'unknown')} risk "
-                f"with score {risk.get('risk_score', 'n/a')}."
-            )
+                enriched += (
+                    f" Parkinson screening indicates {risk.get('risk_level', 'unknown')} risk "
+                    f"with score {risk.get('risk_score', 'n/a')}."
+                )
 
         return DecisionOutput(
             response=enriched,
@@ -330,6 +443,8 @@ class DecisionEngine:
                 "self_attention": {
                     "focus_terms": self_attention.focus_terms,
                     "focus_score": round(self_attention.focus_score, 3),
+                    "urgency_score": round(self_attention.urgency_score, 3),
+                    "risk_terms": self_attention.risk_terms,
                 },
                 "temporal_attention": {
                     "weighted_risk": round(temporal_attention.weighted_risk, 3),
@@ -380,10 +495,10 @@ class DecisionEngine:
         history = self.session_history.get_session_history(user_id)
         return [
             {
-                "timestamp": turn.timestamp.isoformat() if hasattr(turn.timestamp, 'isoformat') else str(turn.timestamp),
+                "timestamp": str(turn.timestamp),
                 "user_text": turn.user_text,
-                "assistant_response": turn.assistant_response,
-                "emotion": turn.emotion if hasattr(turn, 'emotion') else None,
+                "assistant_response": turn.assistant_text,
+                "emotion": turn.emotion_label,
             }
             for turn in history
         ]
@@ -417,7 +532,7 @@ class DecisionEngine:
         total_interactions = len(history)
         
         for log in logs:
-            emotion = log.get("emotion_label", "unknown")
+            emotion = getattr(log, "emotion_label", "unknown") or "unknown"
             emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
         
         return {
@@ -426,4 +541,60 @@ class DecisionEngine:
             "total_logs": len(logs),
             "emotion_distribution": emotion_counts,
             "last_interaction": history[-1]["timestamp"] if history else None,
+        }
+
+    def get_alzheimer_prediction(
+        self,
+        user_id: str,
+        text: str | None = None,
+        cognitive_data: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Compute Alzheimer risk from provided text or recent user logs."""
+        source = "provided_text"
+        sample_text = (text or "").strip()
+
+        if not sample_text:
+            logs = self.get_behavior_logs(user_id)
+            recent_texts = [log.user_text for log in logs[-5:] if getattr(log, "user_text", "").strip()]
+            if recent_texts:
+                sample_text = " ".join(recent_texts)
+                source = "recent_logs"
+            else:
+                sample_text = "No recent speech sample available"
+                source = "fallback"
+
+        result = safe_evaluate_alzheimer(sample_text, cognitive_data or {})
+        return {
+            "user_id": user_id,
+            "source": source,
+            "sample_text": sample_text[:240],
+            **result,
+        }
+
+    def get_parkinson_prediction(
+        self,
+        user_id: str,
+        text: str | None = None,
+        cognitive_data: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Compute Parkinson risk from provided text or recent user logs."""
+        source = "provided_text"
+        sample_text = (text or "").strip()
+
+        if not sample_text:
+            logs = self.get_behavior_logs(user_id)
+            recent_texts = [log.user_text for log in logs[-5:] if getattr(log, "user_text", "").strip()]
+            if recent_texts:
+                sample_text = " ".join(recent_texts)
+                source = "recent_logs"
+            else:
+                sample_text = "No recent speech sample available"
+                source = "fallback"
+
+        result = self._evaluate_parkinson_proxy(sample_text, cognitive_data)
+        return {
+            "user_id": user_id,
+            "source": source,
+            "sample_text": sample_text[:240],
+            **result,
         }

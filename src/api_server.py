@@ -15,6 +15,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.decision_engine import DecisionEngine
+from src.llm_client import generate_llm_response, get_llm_status
+from src.notification_service import EscalationNotificationService
+from src.resident_registry import ResidentRegistry
 from src.modules.caregiver_reporting import CaregiverReportBuilder
 
 # Initialize FastAPI app
@@ -36,13 +39,20 @@ app.add_middleware(
 # Initialize engine
 engine = None
 caregiver_builder = None
+resident_registry = None
+notification_service = None
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize engine on startup"""
-    global engine, caregiver_builder
+    global engine, caregiver_builder, resident_registry, notification_service
     engine = DecisionEngine()
-    caregiver_builder = CaregiverReportBuilder()
+    caregiver_builder = CaregiverReportBuilder(
+        schedule_manager=engine.schedule,
+        history_store=engine.session_history,
+    )
+    resident_registry = ResidentRegistry()
+    notification_service = EscalationNotificationService()
     print("✅ ElderCare AI API initialized")
 
 # Request/Response Models
@@ -51,6 +61,7 @@ class InteractionRequest(BaseModel):
     user_id: str
     session_id: str
     cognitive_data: Optional[Dict[str, Any]] = None
+    language: Optional[str] = 'ta'
 
 class EmotionResult(BaseModel):
     label: str
@@ -87,22 +98,104 @@ class InteractionResponse(BaseModel):
     disease_assessment: Dict[str, Any]
 
 
+class GuardianLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class GuardianLoginResponse(BaseModel):
+    ok: bool
+    resident_id: str = ""
+    resident_name: str = ""
+    guardian_email: str = ""
+
+
+class EscalationRequest(BaseModel):
+    resident_id: str
+    reason: str
+    symptoms: List[str] = []
+    reminder_id: str = ""
+    no_response_seconds: int = 0
+
+
+class AlzheimerPredictionRequest(BaseModel):
+    text: str = ""
+    cognitive_data: Optional[Dict[str, Any]] = None
+
+
+class ParkinsonPredictionRequest(BaseModel):
+    text: str = ""
+    cognitive_data: Optional[Dict[str, Any]] = None
+
+
+import random
+
 def _base_chatbot_response(text: str) -> str:
     lowered = text.lower()
-    if "medicine" in lowered or "medication" in lowered:
-        return "Let us check your medication reminders together."
-    if "sad" in lowered or "worried" in lowered or "anxious" in lowered:
-        return "I am here for you. Would you like a calming breathing exercise?"
+    
+    # Medication/health responses
+    if "medicine" in lowered or "medication" in lowered or "tablet" in lowered:
+        responses = [
+            "Let us check your medication reminders together.",
+            "I can help you manage your medications. What do you need?",
+            "Your medications are important. Shall we review them?",
+        ]
+        return random.choice(responses)
+    
+    if "sad" in lowered or "worried" in lowered or "anxious" in lowered or "upset" in lowered:
+        responses = [
+            "I am here for you. Would you like a calming breathing exercise?",
+            "I understand you are feeling down. Let us talk about it.",
+            "You are not alone. How can I help you feel better?",
+        ]
+        return random.choice(responses)
+    
     if "alzheimer" in lowered:
-        return "I can run an Alzheimer voice screening now."
+        return "I can run an Alzheimer voice screening now. Would you like that?"
+    
     if "parkinson" in lowered:
-        return "I can run a Parkinson voice screening now."
-    return "Thank you for sharing. How can I support you right now?"
+        return "I can run a Parkinson voice screening now. Would you like that?"
+    
+    if "exercise" in lowered or "walk" in lowered or "activity" in lowered:
+        responses = [
+            "Light activity is good for you. Shall we plan a walk?",
+            "Movement helps with wellness. What exercise do you enjoy?",
+            "Regular activity keeps you healthy. Let us do something together.",
+        ]
+        return random.choice(responses)
+    
+    if "memory" in lowered or "forget" in lowered:
+        responses = [
+            "Memory exercises can help. Shall we do a cognitive game?",
+            "Let me help you remember. What are we talking about?",
+            "I can help strengthen your memory with a fun activity.",
+        ]
+        return random.choice(responses)
+    
+    # Default warm responses
+    default_responses = [
+        "Thank you for sharing. How can I support you right now?",
+        "I am listening. Tell me more.",
+        "That is interesting. What else is on your mind?",
+        "I am here to help. What do you need?",
+        "Tell me how I can assist you today.",
+    ]
+    return random.choice(default_responses)
 
 class HealthCheckResponse(BaseModel):
     status: str
     message: str
     version: str
+
+
+class LLMStatusResponse(BaseModel):
+    provider: str
+    enabled: bool
+    endpoint: str
+    model: str
+    api_key_present: bool
+    api_key_source: str
+    last_error: str
 
 # Routes
 
@@ -124,6 +217,12 @@ async def health_check():
         version="1.0.0"
     )
 
+
+@app.get("/api/llm-status", response_model=LLMStatusResponse)
+async def llm_status():
+    """Return live LLM configuration and last provider error for debugging."""
+    return LLMStatusResponse(**get_llm_status())
+
 @app.post("/api/process", response_model=InteractionResponse)
 async def process_interaction(request: InteractionRequest):
     """
@@ -141,14 +240,23 @@ async def process_interaction(request: InteractionRequest):
         raise HTTPException(status_code=503, detail="Engine not initialized")
     
     try:
+        language = request.language or "ta"
+        llm_seed = generate_llm_response(
+            user_text=request.text,
+            language=language,
+        )
+
         result = engine.process_interaction(
             user_id=request.user_id,
             user_text=request.text,
-            base_chatbot_response=None,
+            base_chatbot_response=llm_seed,
             activity="api_chat",
             reminder_missed=False,
             session_id=request.session_id,
-            cognitive_data=request.cognitive_data,
+            cognitive_data={
+                **(request.cognitive_data or {}),
+                "language": language,
+            },
         )
         
         return InteractionResponse(
@@ -165,6 +273,52 @@ async def process_interaction(request: InteractionRequest):
             status_code=500,
             detail=f"Error processing interaction: {str(e)}"
         )
+
+
+@app.get("/api/residents")
+async def list_residents():
+    if not resident_registry:
+        raise HTTPException(status_code=503, detail="Registry not initialized")
+    return {"residents": resident_registry.list_residents()}
+
+
+@app.post("/api/guardian-login", response_model=GuardianLoginResponse)
+async def guardian_login(request: GuardianLoginRequest):
+    if not resident_registry:
+        raise HTTPException(status_code=503, detail="Registry not initialized")
+    auth = resident_registry.authenticate_guardian(request.username, request.password)
+    if not auth:
+        return GuardianLoginResponse(ok=False)
+    return GuardianLoginResponse(
+        ok=True,
+        resident_id=auth["resident_id"],
+        resident_name=auth["resident_name"],
+        guardian_email=auth["guardian_email"],
+    )
+
+
+@app.post("/api/escalate-alert")
+async def escalate_alert(request: EscalationRequest):
+    if not resident_registry or not notification_service:
+        raise HTTPException(status_code=503, detail="Services not initialized")
+
+    recipients = resident_registry.escalation_recipients(request.resident_id)
+    result = notification_service.send_escalation(
+        resident_id=request.resident_id,
+        reason=request.reason,
+        symptoms=request.symptoms,
+        children_emails=recipients["children"],
+        guardian_emails=recipients["guardians"],
+    )
+    return {
+        "ok": True,
+        "message": "Escalation notifications sent to children and nearby guardians",
+        "result": result,
+        "context": {
+            "reminder_id": request.reminder_id,
+            "no_response_seconds": request.no_response_seconds,
+        },
+    }
 
 @app.get("/api/history/{user_id}")
 async def get_session_history(user_id: str):
@@ -245,6 +399,74 @@ async def get_user_stats(user_id: str):
         raise HTTPException(
             status_code=500,
             detail=f"Error fetching stats: {str(e)}"
+        )
+
+
+@app.get("/api/alzheimer-predict/{user_id}")
+async def get_alzheimer_prediction(user_id: str):
+    """Get Alzheimer risk prediction from recent user interactions."""
+    if not engine:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+
+    try:
+        return engine.get_alzheimer_prediction(user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating Alzheimer prediction: {str(e)}"
+        )
+
+
+@app.post("/api/alzheimer-predict/{user_id}")
+async def post_alzheimer_prediction(user_id: str, request: AlzheimerPredictionRequest):
+    """Run Alzheimer risk prediction for provided text/cognitive inputs."""
+    if not engine:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+
+    try:
+        return engine.get_alzheimer_prediction(
+            user_id=user_id,
+            text=request.text,
+            cognitive_data=request.cognitive_data,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating Alzheimer prediction: {str(e)}"
+        )
+
+
+@app.get("/api/parkinson-predict/{user_id}")
+async def get_parkinson_prediction(user_id: str):
+    """Get Parkinson risk prediction from recent user interactions."""
+    if not engine:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+
+    try:
+        return engine.get_parkinson_prediction(user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating Parkinson prediction: {str(e)}"
+        )
+
+
+@app.post("/api/parkinson-predict/{user_id}")
+async def post_parkinson_prediction(user_id: str, request: ParkinsonPredictionRequest):
+    """Run Parkinson risk prediction for provided text/cognitive inputs."""
+    if not engine:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+
+    try:
+        return engine.get_parkinson_prediction(
+            user_id=user_id,
+            text=request.text,
+            cognitive_data=request.cognitive_data,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating Parkinson prediction: {str(e)}"
         )
 
 # Error handlers

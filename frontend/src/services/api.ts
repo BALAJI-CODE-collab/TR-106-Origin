@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api';
 
 export interface EmotionResult {
   label: string;
@@ -55,6 +55,14 @@ export interface DiseaseAssessment {
   parkinson: AlzheimerRisk;
 }
 
+export interface UserStats {
+  user_id: string;
+  total_interactions: number;
+  total_logs: number;
+  emotion_distribution: Record<string, number>;
+  last_interaction: string | null;
+}
+
 export interface DecisionOutput {
   response: string;
   emotion: EmotionResult;
@@ -65,13 +73,64 @@ export interface DecisionOutput {
   disease_assessment: DiseaseAssessment;
 }
 
+export interface AlzheimerPrediction {
+  user_id: string;
+  source: 'provided_text' | 'recent_logs' | 'fallback' | string;
+  sample_text: string;
+  ok: boolean;
+  risk_score?: {
+    risk_score: number;
+    risk_level: 'low' | 'moderate' | 'high';
+    confidence: number;
+    features: Record<string, any>;
+  };
+  error?: string | null;
+}
+
+export interface ParkinsonPrediction {
+  user_id: string;
+  source: 'provided_text' | 'recent_logs' | 'fallback' | string;
+  sample_text: string;
+  ok: boolean;
+  risk_score?: {
+    risk_score: number;
+    risk_level: 'low' | 'moderate' | 'high';
+    confidence: number;
+    features: Record<string, any>;
+  };
+  error?: string | null;
+}
+
+export interface ResidentProfile {
+  resident_id: string;
+  name: string;
+  age: number;
+  room: string;
+  voice_profile: string;
+  allow_activities: boolean;
+  guardian_username: string;
+}
+
+export interface GuardianLoginResponse {
+  ok: boolean;
+  resident_id?: string;
+  resident_name?: string;
+  guardian_email?: string;
+}
+
 class APIClient {
-  async processInteraction(text: string, userId: string, sessionId: string): Promise<DecisionOutput> {
+  async processInteraction(
+    text: string,
+    userId: string,
+    sessionId: string,
+    language: 'en' | 'ta' = 'ta'
+  ): Promise<DecisionOutput> {
     try {
       const response = await axios.post(`${API_BASE_URL}/process`, {
         text,
         user_id: userId,
         session_id: sessionId,
+        language,
       });
       return response.data;
     } catch (error) {
@@ -103,6 +162,93 @@ class APIClient {
       return response.data;
     } catch (error) {
       throw new Error(`Failed to fetch user profile: ${error}`);
+    }
+  }
+
+  async getUserStats(userId: string): Promise<UserStats> {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/stats/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to fetch user stats: ${error}`);
+    }
+  }
+
+  async getResidents(): Promise<ResidentProfile[]> {
+    try {
+      const response = await axios.get(`${API_BASE_URL.replace('/api', '')}/api/residents`);
+      return response.data.residents || [];
+    } catch (error) {
+      throw new Error(`Failed to fetch residents: ${error}`);
+    }
+  }
+
+  async getAlzheimerPrediction(userId: string): Promise<AlzheimerPrediction> {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/alzheimer-predict/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to fetch Alzheimer prediction: ${error}`);
+    }
+  }
+
+  async runAlzheimerPrediction(
+    userId: string,
+    payload: { text?: string; cognitive_data?: Record<string, any> }
+  ): Promise<AlzheimerPrediction> {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/alzheimer-predict/${userId}`, payload);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to run Alzheimer prediction: ${error}`);
+    }
+  }
+
+  async getParkinsonPrediction(userId: string): Promise<ParkinsonPrediction> {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/parkinson-predict/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to fetch Parkinson prediction: ${error}`);
+    }
+  }
+
+  async runParkinsonPrediction(
+    userId: string,
+    payload: { text?: string; cognitive_data?: Record<string, any> }
+  ): Promise<ParkinsonPrediction> {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/parkinson-predict/${userId}`, payload);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to run Parkinson prediction: ${error}`);
+    }
+  }
+
+  async guardianLogin(username: string, password: string): Promise<GuardianLoginResponse> {
+    try {
+      const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/guardian-login`, {
+        username,
+        password,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(`Guardian login failed: ${error}`);
+    }
+  }
+
+  async escalateAlert(payload: {
+    resident_id: string;
+    reason: string;
+    symptoms: string[];
+    reminder_id?: string;
+    no_response_seconds?: number;
+  }): Promise<any> {
+    try {
+      const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/escalate-alert`, payload);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to escalate alert: ${error}`);
     }
   }
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Globe, LogOut } from 'lucide-react';
+import { Activity, Brain, Globe, LogOut } from 'lucide-react';
 import { MicButton } from './MicButton';
 import { ChatWindow } from './ChatWindow';
 import { ReminderPanel } from './ReminderPanel';
@@ -8,13 +8,20 @@ import { EmotionIndicator } from './EmotionIndicator';
 import { CognitiveGame } from './CognitiveGame';
 import { voiceService } from '../../services/voice';
 import { useAppState } from '../../hooks/useAppState';
-import { apiClient } from '../../services/api';
+import { apiClient, DiseaseAssessment } from '../../services/api';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   text: string;
   timestamp: Date;
+}
+
+interface ToastNotification {
+  id: string;
+  text: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  durationMs: number;
 }
 
 export const ElderlyInterface: React.FC = () => {
@@ -25,17 +32,27 @@ export const ElderlyInterface: React.FC = () => {
     addGameResult,
     setListening,
     setProcessing,
-    setLanguage,
   } = useAppState();
+
+  const TAMIL_SPEECH_LANGUAGE = 'ta-IN';
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [interimText, setInterimText] = useState('');
   const [showGameModule, setShowGameModule] = useState(false);
   const [gameTriggered, setGameTriggered] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [activeReminderId, setActiveReminderId] = useState<string | null>(null);
   const [freezeSecondsLeft, setFreezeSecondsLeft] = useState(0);
+  const [noResponseSecondsLeft, setNoResponseSecondsLeft] = useState(0);
   const [seenReminderIds, setSeenReminderIds] = useState<string[]>([]);
+  const [freezeReason, setFreezeReason] = useState<'taken' | 'not_taken' | ''>('');
+  const [pendingCompletionReminderId, setPendingCompletionReminderId] = useState<string | null>(null);
+  const [escalationSent, setEscalationSent] = useState(false);
+  const [symptomLock, setSymptomLock] = useState(false);
+  const [guardianUsername, setGuardianUsername] = useState('guardian001');
+  const [guardianPassword, setGuardianPassword] = useState('guard@001');
+  const [allowActivities, setAllowActivities] = useState(false);
+  const [notifications, setNotifications] = useState<ToastNotification[]>([]);
+  const [latestDiseaseAssessment, setLatestDiseaseAssessment] = useState<DiseaseAssessment | null>(null);
 
   const activeReminder = useMemo(
     () => state.reminders.find((r) => r.id === activeReminderId) || null,
@@ -43,18 +60,48 @@ export const ElderlyInterface: React.FC = () => {
   );
 
   useEffect(() => {
-    const updateViewport = () => setIsMobile(window.innerWidth <= 768);
-    updateViewport();
-    window.addEventListener('resize', updateViewport);
-    return () => window.removeEventListener('resize', updateViewport);
+    voiceService.setLanguage(TAMIL_SPEECH_LANGUAGE);
+  }, [TAMIL_SPEECH_LANGUAGE]);
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      void Notification.requestPermission();
+    }
   }, []);
 
-  useEffect(() => {
-    voiceService.setLanguage(state.selectedLanguage === 'ta' ? 'ta-IN' : 'en-US');
-  }, [state.selectedLanguage]);
+  const pushNotification = (text: string, type: ToastNotification['type'] = 'info', durationMs: number = 5000) => {
+    const id = `ntf_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    setNotifications((prev) => [...prev, { id, text, type, durationMs }]);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('ElderCare Alert', { body: text });
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    window.setTimeout(() => {
+      setNotifications((prev) => prev.filter((item) => item.id !== id));
+    }, durationMs);
+  };
 
   useEffect(() => {
-    if (!isMobile || activeReminderId || freezeSecondsLeft > 0) {
+    const loadResidentPolicy = async () => {
+      try {
+        const residents = await apiClient.getResidents();
+        const currentResident = residents.find((r) => r.resident_id === state.userId);
+        setAllowActivities(Boolean(currentResident?.allow_activities));
+      } catch (error) {
+        console.error(error);
+        setAllowActivities(false);
+      }
+    };
+    void loadResidentPolicy();
+  }, [state.userId]);
+
+  useEffect(() => {
+    if (activeReminderId || freezeSecondsLeft > 0) {
       return;
     }
 
@@ -66,7 +113,6 @@ export const ElderlyInterface: React.FC = () => {
       setActiveReminderId(nextReminder.id);
     }
   }, [
-    isMobile,
     state.reminders,
     activeReminderId,
     freezeSecondsLeft,
@@ -74,15 +120,25 @@ export const ElderlyInterface: React.FC = () => {
   ]);
 
   useEffect(() => {
-    if (freezeSecondsLeft <= 0 || !activeReminderId) {
+    if (activeReminderId && freezeSecondsLeft === 0 && !escalationSent) {
+      setNoResponseSecondsLeft((prev) => (prev > 0 ? prev : 45));
+    }
+  }, [activeReminderId, freezeSecondsLeft, escalationSent]);
+
+  useEffect(() => {
+    if (freezeSecondsLeft <= 0) {
       return;
     }
 
     const timer = window.setInterval(() => {
       setFreezeSecondsLeft((prev) => {
         if (prev <= 1) {
-          completeReminder(activeReminderId);
+          if (freezeReason === 'taken' && pendingCompletionReminderId) {
+            completeReminder(pendingCompletionReminderId);
+          }
           setActiveReminderId(null);
+          setPendingCompletionReminderId(null);
+          setFreezeReason('');
           return 0;
         }
         return prev - 1;
@@ -90,10 +146,39 @@ export const ElderlyInterface: React.FC = () => {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [freezeSecondsLeft, activeReminderId, completeReminder]);
+  }, [freezeSecondsLeft, pendingCompletionReminderId, completeReminder, freezeReason]);
+
+  useEffect(() => {
+    if (!activeReminderId || freezeSecondsLeft > 0 || noResponseSecondsLeft <= 0 || escalationSent) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setNoResponseSecondsLeft((prev) => {
+        if (prev <= 1) {
+          void apiClient.escalateAlert({
+            resident_id: state.userId,
+            reason: 'No response to medication confirmation notification',
+            symptoms: symptomLock ? ['fever', 'sore throat'] : [],
+            reminder_id: activeReminderId,
+            no_response_seconds: 45,
+          });
+          pushNotification('No response detected. Alert sent to children and nearby guardians.', 'warning', 300000);
+          setEscalationSent(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [activeReminderId, freezeSecondsLeft, noResponseSecondsLeft, escalationSent, state.userId, symptomLock]);
 
   // Handle speech recognition
   const handleStartListening = () => {
+    if (symptomLock) {
+      return;
+    }
     setListening(true);
     setInterimText('');
 
@@ -118,6 +203,41 @@ export const ElderlyInterface: React.FC = () => {
     setListening(false);
   };
 
+  const buildSeniorFriendlyTamilSpeech = (rawText: string) => {
+    let text = rawText;
+
+    // Convert mixed English care words into simpler Tamil terms for clearer elderly TTS.
+    text = text.replace(/\bbreakfast\b/gi, 'காலை உணவு');
+    text = text.replace(/\blunch\b/gi, 'மதிய உணவு');
+    text = text.replace(/\bdinner\b/gi, 'இரவு உணவு');
+    text = text.replace(/\bmeal\b/gi, 'உணவு');
+
+    // Keep replacements conservative so full sentence content is preserved.
+    text = text.replace(/\bhi\s+my\s+name\s+is\s+/gi, 'வணக்கம். என் பெயர் ');
+    text = text.replace(/\bmy\s+name\s+is\s+/gi, 'என் பெயர் ');
+    text = text.replace(/\bi\s+remember\s*[:]?\s*/gi, 'எனக்கு நினைவில் உள்ளது. ');
+    text = text.replace(/\bupcoming\s+meal\s+at\s+/gi, 'அடுத்த உணவு நேரம் ');
+
+    // Read times as words for better audio understanding.
+    text = text.replace(/(\d{1,2}):(\d{2})/g, '$1 மணி $2 நிமிடம்');
+
+    // Translate risk labels when they appear in mixed output.
+    text = text.replace(/\blow\b/gi, 'குறைவு');
+    text = text.replace(/\bmoderate\b/gi, 'மிதமான');
+    text = text.replace(/\bhigh\b/gi, 'அதிகம்');
+
+    // Add pauses for clearer speech cadence.
+    text = text.replace(/;/g, '. ');
+    text = text.replace(/\s+/g, ' ').trim();
+
+    // Safety: if formatting accidentally collapses content, use original text.
+    if (text.length < Math.max(24, Math.floor(rawText.length * 0.45))) {
+      return rawText;
+    }
+
+    return text;
+  };
+
   // Handle user input
   const handleUserInput = async (userText: string) => {
     if (!userText.trim()) return;
@@ -138,7 +258,8 @@ export const ElderlyInterface: React.FC = () => {
       const response = await apiClient.processInteraction(
         userText,
         state.userId,
-        `session_${Date.now()}`
+        `session_${Date.now()}`,
+        'ta'
       );
 
       let spokenResponse = response.response;
@@ -146,13 +267,13 @@ export const ElderlyInterface: React.FC = () => {
       if (requestedDisease === 'alzheimer') {
         const risk = response.disease_assessment.alzheimer?.risk_score;
         if (risk) {
-          spokenResponse += ` Assessment result: Alzheimer risk is ${risk.risk_level} with score ${risk.risk_score}.`;
+          spokenResponse += ` மதிப்பீட்டு முடிவு: அல்சைமர் ஆபத்து நிலை ${risk.risk_level}, மதிப்பு ${risk.risk_score}.`;
         }
       }
       if (requestedDisease === 'parkinson') {
         const risk = response.disease_assessment.parkinson?.risk_score;
         if (risk) {
-          spokenResponse += ` Assessment result: Parkinson risk is ${risk.risk_level} with score ${risk.risk_score}.`;
+          spokenResponse += ` மதிப்பீட்டு முடிவு: பார்கின்சன் ஆபத்து நிலை ${risk.risk_level}, மதிப்பு ${risk.risk_score}.`;
         }
       }
 
@@ -165,6 +286,19 @@ export const ElderlyInterface: React.FC = () => {
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+      setLatestDiseaseAssessment(response.disease_assessment || null);
+
+      const lowered = userText.toLowerCase();
+      const hasFever = lowered.includes('fever') || userText.includes('காய்ச்சல்');
+      const hasSoreThroat = lowered.includes('sore throat') || userText.includes('தொண்டை வலி');
+      if (hasFever && hasSoreThroat) {
+        setSymptomLock(true);
+        const medicineReminder = state.reminders.find((r) => r.category === 'medicine' && !r.completed);
+        if (medicineReminder) {
+          setActiveReminderId(medicineReminder.id);
+          setNoResponseSecondsLeft(45);
+        }
+      }
 
       // Store in app state
       addConversationTurn(
@@ -175,24 +309,26 @@ export const ElderlyInterface: React.FC = () => {
       );
 
       // Speak response
+      const speechText = buildSeniorFriendlyTamilSpeech(spokenResponse);
       await voiceService.speak(
-        spokenResponse,
-        state.selectedLanguage === 'ta' ? 'ta-IN' : 'en-US',
-        0.9
+        speechText,
+        TAMIL_SPEECH_LANGUAGE,
+        0.92
       );
 
       // Check if game should be triggered
       const riskScore = response.alzheimer_risk?.risk_score?.risk_score || 0;
-      if (riskScore > 0.5 && !gameTriggered) {
+      if (allowActivities && riskScore > 0.5 && !gameTriggered) {
         setGameTriggered(true);
         setShowGameModule(true);
       }
     } catch (error) {
       console.error('Error:', error);
+      pushNotification('Chatbot connection issue. Please try again.', 'error');
       const errorMessage: Message = {
         id: `msg_${Date.now() + 1}`,
         role: 'assistant',
-        text: 'Sorry, I had trouble understanding. Please try again.',
+        text: 'மன்னிக்கவும், உங்கள் கோரிக்கையை புரிந்துகொள்ள சிரமம் ஏற்பட்டது. மீண்டும் முயற்சிக்கவும்.',
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -203,10 +339,11 @@ export const ElderlyInterface: React.FC = () => {
 
   const handlePlayAudio = async (text: string) => {
     try {
+      const speechText = buildSeniorFriendlyTamilSpeech(text);
       await voiceService.speak(
-        text,
-        state.selectedLanguage === 'ta' ? 'ta-IN' : 'en-US',
-        0.9
+        speechText,
+        TAMIL_SPEECH_LANGUAGE,
+        0.92
       );
     } catch (error) {
       console.error('Error playing audio:', error);
@@ -218,7 +355,52 @@ export const ElderlyInterface: React.FC = () => {
       return;
     }
     setSeenReminderIds((prev) => [...prev, activeReminderId]);
+    setPendingCompletionReminderId(activeReminderId);
+    setActiveReminderId(null);
+    setNoResponseSecondsLeft(0);
+    setFreezeReason('taken');
     setFreezeSecondsLeft(300);
+    pushNotification('Medication marked as taken. Screen frozen for 5 minutes.', 'success', 300000);
+  };
+
+  const handleReminderNotTaken = async () => {
+    if (!activeReminderId) {
+      return;
+    }
+    setFreezeReason('not_taken');
+    setFreezeSecondsLeft(300);
+    setNoResponseSecondsLeft(0);
+    if (!escalationSent) {
+      try {
+        await apiClient.escalateAlert({
+          resident_id: state.userId,
+          reason: 'Medication not taken confirmation received',
+          symptoms: symptomLock ? ['fever', 'sore throat'] : [],
+          reminder_id: activeReminderId,
+          no_response_seconds: 0,
+        });
+        setEscalationSent(true);
+        pushNotification('Medication not taken. Alert sent to children and nearby guardians.', 'warning', 300000);
+      } catch (error) {
+        console.error(error);
+        pushNotification('Failed to send escalation alert. Please try again.', 'error');
+      }
+    }
+  };
+
+  const handleGuardianUnlock = async () => {
+    try {
+      const result = await apiClient.guardianLogin(guardianUsername, guardianPassword);
+      if (!result.ok) {
+        pushNotification('Invalid guardian credentials.', 'error');
+        return;
+      }
+      setSymptomLock(false);
+      pushNotification('Guardian verified. Safety lock removed.', 'success');
+    } catch (error) {
+      console.error(error);
+      pushNotification('Unable to verify guardian credentials right now.', 'error');
+    }
   };
 
   const formatFreezeTimer = (seconds: number) => {
@@ -230,12 +412,42 @@ export const ElderlyInterface: React.FC = () => {
   const quickActions = [
     { id: 'q1', label: 'இன்றைய அட்டவணை சொல்லுங்கள்' },
     { id: 'q2', label: 'நினைவாற்றல் விளையாட்டு தொடங்கு' },
-    { id: 'q3', label: 'நான் கவலையாக இருக்கிறேன்' },
+    { id: 'q3', label: 'பார்கின்சன் பரிசோதனை செய்யவும்' },
+    { id: 'q4', label: 'நான் கவலையாக இருக்கிறேன்' },
   ];
 
+  const getRiskBadgeClasses = (riskLevel?: string) => {
+    if (riskLevel === 'high') {
+      return 'bg-rose-500/20 text-rose-100 border border-rose-300/30';
+    }
+    if (riskLevel === 'moderate') {
+      return 'bg-amber-500/20 text-amber-100 border border-amber-300/30';
+    }
+    return 'bg-emerald-500/20 text-emerald-100 border border-emerald-300/30';
+  };
+
+  const triggerAlzheimerGame = () => {
+    if (symptomLock) {
+      return;
+    }
+    setShowGameModule(true);
+    void handleUserInput('alzheimer screening செய்யவும்');
+  };
+
+  const triggerParkinsonCheck = () => {
+    if (symptomLock) {
+      return;
+    }
+    void handleUserInput('parkinson screening செய்யவும்');
+  };
+
   const handleQuickAction = (label: string) => {
+    if (symptomLock) {
+      return;
+    }
     if (label.includes('விளையாட்டு')) {
       setShowGameModule(true);
+      void handleUserInput('alzheimer screening செய்யவும்');
       return;
     }
     handleUserInput(label);
@@ -271,7 +483,7 @@ export const ElderlyInterface: React.FC = () => {
           </div>
 
           <div className="flex gap-3">
-            {/* Language Selector */}
+            {/* Tamil-Only Speech Mode */}
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -279,15 +491,8 @@ export const ElderlyInterface: React.FC = () => {
             >
               <Globe className="w-5 h-5" />
               <div className="flex flex-col">
-                <span className="text-xs text-cyan-100">Select Language</span>
-                <select
-                  value={state.selectedLanguage}
-                  onChange={(e) => setLanguage(e.target.value as 'en' | 'ta')}
-                  className="bg-transparent text-sm font-semibold text-white outline-none"
-                >
-                  <option value="ta" className="text-slate-900">Tamil</option>
-                  <option value="en" className="text-slate-900">English</option>
-                </select>
+                <span className="text-xs text-cyan-100">Speech Language</span>
+                <span className="text-sm font-semibold text-white">Tamil (தமிழ்)</span>
               </div>
             </motion.div>
 
@@ -348,6 +553,46 @@ export const ElderlyInterface: React.FC = () => {
                 "{interimText}"
               </motion.p>
             )}
+
+            <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+                <div className="flex items-center gap-2 text-cyan-800">
+                  <Brain className="h-5 w-5" />
+                  <h3 className="font-semibold">Alzheimer Game</h3>
+                </div>
+                <p className="mt-2 text-sm text-cyan-900">Run memory game + Alzheimer screening in one tap.</p>
+                <button
+                  onClick={triggerAlzheimerGame}
+                  className="mt-3 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Start Alzheimer Game
+                </button>
+                {latestDiseaseAssessment?.alzheimer?.risk_score && (
+                  <p className={`mt-3 inline-block rounded-full px-3 py-1 text-xs font-semibold ${getRiskBadgeClasses(latestDiseaseAssessment.alzheimer.risk_score.risk_level)}`}>
+                    Risk: {latestDiseaseAssessment.alzheimer.risk_score.risk_level} ({Math.round(latestDiseaseAssessment.alzheimer.risk_score.risk_score * 100)}%)
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                <div className="flex items-center gap-2 text-indigo-800">
+                  <Activity className="h-5 w-5" />
+                  <h3 className="font-semibold">Parkinson Check</h3>
+                </div>
+                <p className="mt-2 text-sm text-indigo-900">Run speech-based Parkinson risk analysis.</p>
+                <button
+                  onClick={triggerParkinsonCheck}
+                  className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Start Parkinson Check
+                </button>
+                {latestDiseaseAssessment?.parkinson?.risk_score && (
+                  <p className={`mt-3 inline-block rounded-full px-3 py-1 text-xs font-semibold ${getRiskBadgeClasses(latestDiseaseAssessment.parkinson.risk_score.risk_level)}`}>
+                    Risk: {latestDiseaseAssessment.parkinson.risk_score.risk_level} ({Math.round(latestDiseaseAssessment.parkinson.risk_score.risk_score * 100)}%)
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Chat Window */}
@@ -390,8 +635,8 @@ export const ElderlyInterface: React.FC = () => {
         </motion.div>
       )}
 
-      {/* Mobile Freeze Reminder Modal */}
-      {isMobile && activeReminder && (
+      {/* Freeze Reminder Modal */}
+      {activeReminder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 14 }}
@@ -412,15 +657,90 @@ export const ElderlyInterface: React.FC = () => {
                 <p className="mt-1 text-3xl font-bold text-amber-200">{formatFreezeTimer(freezeSecondsLeft)}</p>
               </div>
             ) : (
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={handleReminderTaken}
-                className="mt-5 w-full rounded-xl bg-cyan-500 px-4 py-3 text-lg font-bold text-slate-950"
-              >
-                Taken
-              </motion.button>
+              <div className="mt-5 space-y-3">
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleReminderTaken}
+                  className="w-full rounded-xl bg-cyan-500 px-4 py-3 text-lg font-bold text-slate-950"
+                >
+                  Yes, Taken
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleReminderNotTaken}
+                  className="w-full rounded-xl bg-rose-500 px-4 py-3 text-lg font-bold text-white"
+                >
+                  No, Not Taken
+                </motion.button>
+                {noResponseSecondsLeft > 0 && (
+                  <p className="text-center text-sm text-rose-200">Escalation countdown: {noResponseSecondsLeft}s</p>
+                )}
+              </div>
             )}
           </motion.div>
+        </div>
+      )}
+
+      {symptomLock && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#020617]/95 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-rose-300/40 bg-slate-950/95 p-6 text-white">
+            <h3 className="font-[Orbitron] text-2xl font-bold text-rose-200">Health Safety Lock</h3>
+            <p className="mt-3 text-sm text-slate-300">
+              Fever and sore throat symptoms detected. Guardian authentication is required to continue.
+            </p>
+            <div className="mt-5 space-y-3">
+              <input
+                value={guardianUsername}
+                onChange={(e) => setGuardianUsername(e.target.value)}
+                className="w-full rounded-xl border border-white/20 bg-slate-900 px-4 py-3"
+                placeholder="Guardian username"
+              />
+              <input
+                type="password"
+                value={guardianPassword}
+                onChange={(e) => setGuardianPassword(e.target.value)}
+                className="w-full rounded-xl border border-white/20 bg-slate-900 px-4 py-3"
+                placeholder="Guardian password"
+              />
+              <button
+                onClick={handleGuardianUnlock}
+                className="w-full rounded-xl bg-cyan-400 px-4 py-3 font-bold text-slate-950"
+              >
+                Guardian Unlock
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {freezeReason === 'taken' && freezeSecondsLeft > 0 && (
+        <div className="fixed right-4 top-20 z-[78] w-full max-w-sm">
+          <div className="rounded-xl border border-amber-300/40 bg-amber-500/20 px-4 py-3 text-amber-50 shadow-2xl backdrop-blur-xl">
+            <p className="text-sm font-semibold">Medication confirmation freeze is active</p>
+            <p className="mt-1 text-sm">You can continue using chatbot features. Freeze ends in:</p>
+            <p className="mt-2 text-2xl font-bold text-amber-100">{formatFreezeTimer(freezeSecondsLeft)}</p>
+          </div>
+        </div>
+      )}
+
+      {notifications.length > 0 && (
+        <div className="fixed right-4 top-4 z-[80] w-full max-w-sm space-y-3">
+          {notifications.map((item) => (
+            <div
+              key={item.id}
+              className={`rounded-xl border px-4 py-3 text-sm font-semibold shadow-2xl backdrop-blur-xl ${
+                item.type === 'success'
+                  ? 'border-emerald-300/40 bg-emerald-500/20 text-emerald-50'
+                  : item.type === 'warning'
+                    ? 'border-amber-300/40 bg-amber-500/20 text-amber-50'
+                    : item.type === 'error'
+                      ? 'border-rose-300/40 bg-rose-500/20 text-rose-50'
+                      : 'border-cyan-300/40 bg-cyan-500/20 text-cyan-50'
+              }`}
+            >
+              {item.text}
+            </div>
+          ))}
         </div>
       )}
     </div>

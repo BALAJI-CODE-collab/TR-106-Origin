@@ -64,6 +64,51 @@ set LIVEKIT_API_KEY=your_livekit_api_key
 set LIVEKIT_API_SECRET=your_livekit_api_secret
 ```
 
+Optional: enable cloud LLM chatbot replies (with local fallback if key is missing):
+
+```bash
+# Choose one provider: groq | openrouter | openai | none
+set LLM_PROVIDER=groq
+
+# Single key variable used by all providers
+set LLM_API_KEY=your_provider_api_key
+
+# Provider-specific alternatives (also supported)
+# set GROQ_API_KEY=...
+# set OPENROUTER_API_KEY=...
+# set OPENAI_API_KEY=...
+
+# Optional override model
+set LLM_MODEL=llama-3.1-8b-instant
+```
+
+Recommended low-cost/free start:
+
+- `LLM_PROVIDER=groq` and a Groq API key (easy signup, free tier available).
+- If Groq usage limits are reached, switch to `LLM_PROVIDER=openrouter` and use an OpenRouter key with a `:free` model.
+
+No chatbot outage if LLM key is unavailable: the backend automatically falls back to local companion logic.
+
+Live LLM diagnostics:
+
+```bash
+GET /api/llm-status
+```
+
+This returns provider, model, key presence, and the last provider error.
+
+Optional: encrypt stored chat/speech data at rest:
+
+```bash
+set CHATBOT_ENCRYPTION_KEY=your_long_random_secret
+```
+
+When this is set, user text and assistant replies are encrypted before saving to:
+
+- `data/behavior_logs.jsonl`
+- `data/session_history.json`
+- `data/memory_db.json`
+
 Run demo:
 
 ```bash

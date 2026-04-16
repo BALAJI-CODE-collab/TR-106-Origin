@@ -22,22 +22,24 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onPlayAudio })
   }, [messages]);
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-blue-50 to-white rounded-xl shadow-lg">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/95 shadow-2xl backdrop-blur-xl">
       {/* Chat Header */}
-      <div className="bg-blue-600 text-white p-6 rounded-t-xl">
-        <h2 className="text-2xl font-bold tracking-wide">Conversation</h2>
+      <div className="border-b border-white/10 bg-slate-950/90 px-6 py-5 text-white">
+        <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">AI Bot</p>
+        <h2 className="mt-2 font-[Orbitron] text-2xl font-bold tracking-wide text-white">உரையாடல்</h2>
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 space-y-4 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.08),transparent_40%),linear-gradient(180deg,rgba(2,6,23,0.98),rgba(15,23,42,0.94))] p-6">
         <AnimatePresence mode="wait">
           {messages.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="h-full flex flex-col items-center justify-center text-center text-gray-500"
+              className="flex h-full flex-col items-center justify-center text-center text-slate-300"
             >
-              <p className="text-xl">Start speaking to begin!</p>
+              <div className="mb-4 h-16 w-16 rounded-full border border-cyan-300/30 bg-cyan-400/10" />
+              <p className="max-w-sm text-lg leading-8">பேசத் தொடங்குங்கள். நான் உங்கள் கேள்விகளை பதிலளிப்பேன்.</p>
             </motion.div>
           ) : (
             messages.map((msg, idx) => (
@@ -50,10 +52,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onPlayAudio })
               >
                 <div
                   className={`
-                    max-w-xs lg:max-w-md px-5 py-4 rounded-2xl text-base leading-relaxed
+                    max-w-xs lg:max-w-md px-5 py-4 rounded-2xl text-base leading-relaxed shadow-lg
                     ${msg.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-br-none'
-                      : 'bg-gray-200 text-gray-900 rounded-bl-none'
+                      ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-br-none'
+                      : 'border border-white/10 bg-white/95 text-slate-900 rounded-bl-none'
                     }
                   `}
                 >
@@ -65,10 +67,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onPlayAudio })
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => onPlayAudio(msg.text)}
-                      className="mt-3 flex items-center gap-2 bg-white bg-opacity-30 hover:bg-opacity-50 px-3 py-2 rounded-lg text-sm font-semibold transition"
+                      className="mt-3 flex items-center gap-2 rounded-lg bg-slate-950/10 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-950/20"
                     >
                       <Volume2 className="w-4 h-4" />
-                      Read aloud
+                      ஒலி வாசிப்பு
                     </motion.button>
                   )}
                 </div>
