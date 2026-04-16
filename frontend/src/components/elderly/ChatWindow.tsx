@@ -26,7 +26,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onPlayAudio })
       {/* Chat Header */}
       <div className="border-b border-white/10 bg-slate-950/90 px-6 py-5 text-white">
         <p className="text-xs uppercase tracking-[0.35em] text-cyan-300">AI Bot</p>
-        <h2 className="mt-2 font-[Orbitron] text-2xl font-bold tracking-wide text-white">உரையாடல்</h2>
+        <h2 className="mt-2 font-[Orbitron] text-2xl font-bold tracking-wide text-white">Conversation</h2>
       </div>
 
       {/* Messages Container */}
@@ -39,7 +39,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onPlayAudio })
               className="flex h-full flex-col items-center justify-center text-center text-slate-300"
             >
               <div className="mb-4 h-16 w-16 rounded-full border border-cyan-300/30 bg-cyan-400/10" />
-              <p className="max-w-sm text-lg leading-8">பேசத் தொடங்குங்கள். நான் உங்கள் கேள்விகளை பதிலளிப்பேன்.</p>
+              <p className="max-w-sm text-lg leading-8">Start speaking. I will answer your questions.</p>
             </motion.div>
           ) : (
             messages.map((msg, idx) => (
@@ -70,7 +70,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages, onPlayAudio })
                       className="mt-3 flex items-center gap-2 rounded-lg bg-slate-950/10 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-950/20"
                     >
                       <Volume2 className="w-4 h-4" />
-                      ஒலி வாசிப்பு
+                      Read Aloud
                     </motion.button>
                   )}
                 </div>

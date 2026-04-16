@@ -123,7 +123,7 @@ class APIClient {
     text: string,
     userId: string,
     sessionId: string,
-    language: 'en' | 'ta' = 'ta'
+    language: 'en' | 'ta' = 'en'
   ): Promise<DecisionOutput> {
     try {
       const response = await axios.post(`${API_BASE_URL}/process`, {

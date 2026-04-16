@@ -61,7 +61,7 @@ class InteractionRequest(BaseModel):
     user_id: str
     session_id: str
     cognitive_data: Optional[Dict[str, Any]] = None
-    language: Optional[str] = 'ta'
+    language: Optional[str] = 'en'
 
 class EmotionResult(BaseModel):
     label: str

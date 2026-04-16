@@ -49,7 +49,7 @@ export interface AppState {
   // UI State
   isListening: boolean;
   isProcessing: boolean;
-  selectedLanguage: 'en' | 'ta'; // Tamil support
+  selectedLanguage: 'en' | 'ta';
   currentView: 'elderly' | 'caregiver';
 
   // User
@@ -88,7 +88,7 @@ const INITIAL_STATE: AppState = {
   lastGameType: null,
   isListening: false,
   isProcessing: false,
-  selectedLanguage: 'ta',
+  selectedLanguage: 'en',
   currentView: 'elderly',
   userId: 'elder_001',
   userName: 'Grandpa',

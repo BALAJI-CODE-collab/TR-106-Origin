@@ -18,7 +18,7 @@ interface VoiceServiceConfig {
 class VoiceService {
   private recognition: any;
   private isListening: boolean = false;
-  private currentLanguage: string = 'ta-IN';
+  private currentLanguage: string = 'en-US';
 
   private findBestTamilVoice(): SpeechSynthesisVoice | null {
     if (!window.speechSynthesis) {
@@ -275,7 +275,7 @@ class VoiceService {
 export const voiceService = new VoiceService({
   continuous: false,
   interimResults: true,
-  language: 'ta-IN',
+  language: 'en-US',
 });
 
 export default VoiceService;

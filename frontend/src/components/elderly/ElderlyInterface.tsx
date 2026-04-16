@@ -34,7 +34,7 @@ export const ElderlyInterface: React.FC = () => {
     setProcessing,
   } = useAppState();
 
-  const TAMIL_SPEECH_LANGUAGE = 'ta-IN';
+  const ENGLISH_SPEECH_LANGUAGE = 'en-US';
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [interimText, setInterimText] = useState('');
@@ -60,8 +60,8 @@ export const ElderlyInterface: React.FC = () => {
   );
 
   useEffect(() => {
-    voiceService.setLanguage(TAMIL_SPEECH_LANGUAGE);
-  }, [TAMIL_SPEECH_LANGUAGE]);
+    voiceService.setLanguage(ENGLISH_SPEECH_LANGUAGE);
+  }, [ENGLISH_SPEECH_LANGUAGE]);
 
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -203,34 +203,15 @@ export const ElderlyInterface: React.FC = () => {
     setListening(false);
   };
 
-  const buildSeniorFriendlyTamilSpeech = (rawText: string) => {
+  const buildSeniorFriendlyEnglishSpeech = (rawText: string) => {
     let text = rawText;
 
-    // Convert mixed English care words into simpler Tamil terms for clearer elderly TTS.
-    text = text.replace(/\bbreakfast\b/gi, 'காலை உணவு');
-    text = text.replace(/\blunch\b/gi, 'மதிய உணவு');
-    text = text.replace(/\bdinner\b/gi, 'இரவு உணவு');
-    text = text.replace(/\bmeal\b/gi, 'உணவு');
-
-    // Keep replacements conservative so full sentence content is preserved.
-    text = text.replace(/\bhi\s+my\s+name\s+is\s+/gi, 'வணக்கம். என் பெயர் ');
-    text = text.replace(/\bmy\s+name\s+is\s+/gi, 'என் பெயர் ');
-    text = text.replace(/\bi\s+remember\s*[:]?\s*/gi, 'எனக்கு நினைவில் உள்ளது. ');
-    text = text.replace(/\bupcoming\s+meal\s+at\s+/gi, 'அடுத்த உணவு நேரம் ');
-
-    // Read times as words for better audio understanding.
-    text = text.replace(/(\d{1,2}):(\d{2})/g, '$1 மணி $2 நிமிடம்');
-
-    // Translate risk labels when they appear in mixed output.
-    text = text.replace(/\blow\b/gi, 'குறைவு');
-    text = text.replace(/\bmoderate\b/gi, 'மிதமான');
-    text = text.replace(/\bhigh\b/gi, 'அதிகம்');
-
-    // Add pauses for clearer speech cadence.
+    // Expand common abbreviations and improve cadence for clearer speech output.
+    text = text.replace(/\be\.g\.\b/gi, 'for example');
+    text = text.replace(/\bi\.e\.\b/gi, 'that is');
     text = text.replace(/;/g, '. ');
     text = text.replace(/\s+/g, ' ').trim();
 
-    // Safety: if formatting accidentally collapses content, use original text.
     if (text.length < Math.max(24, Math.floor(rawText.length * 0.45))) {
       return rawText;
     }
@@ -259,7 +240,7 @@ export const ElderlyInterface: React.FC = () => {
         userText,
         state.userId,
         `session_${Date.now()}`,
-        'ta'
+        'en'
       );
 
       let spokenResponse = response.response;
@@ -267,13 +248,13 @@ export const ElderlyInterface: React.FC = () => {
       if (requestedDisease === 'alzheimer') {
         const risk = response.disease_assessment.alzheimer?.risk_score;
         if (risk) {
-          spokenResponse += ` மதிப்பீட்டு முடிவு: அல்சைமர் ஆபத்து நிலை ${risk.risk_level}, மதிப்பு ${risk.risk_score}.`;
+          spokenResponse += ` Assessment result: Alzheimer risk level is ${risk.risk_level}, score ${risk.risk_score}.`;
         }
       }
       if (requestedDisease === 'parkinson') {
         const risk = response.disease_assessment.parkinson?.risk_score;
         if (risk) {
-          spokenResponse += ` மதிப்பீட்டு முடிவு: பார்கின்சன் ஆபத்து நிலை ${risk.risk_level}, மதிப்பு ${risk.risk_score}.`;
+          spokenResponse += ` Assessment result: Parkinson risk level is ${risk.risk_level}, score ${risk.risk_score}.`;
         }
       }
 
@@ -289,8 +270,8 @@ export const ElderlyInterface: React.FC = () => {
       setLatestDiseaseAssessment(response.disease_assessment || null);
 
       const lowered = userText.toLowerCase();
-      const hasFever = lowered.includes('fever') || userText.includes('காய்ச்சல்');
-      const hasSoreThroat = lowered.includes('sore throat') || userText.includes('தொண்டை வலி');
+      const hasFever = lowered.includes('fever');
+      const hasSoreThroat = lowered.includes('sore throat');
       if (hasFever && hasSoreThroat) {
         setSymptomLock(true);
         const medicineReminder = state.reminders.find((r) => r.category === 'medicine' && !r.completed);
@@ -309,10 +290,10 @@ export const ElderlyInterface: React.FC = () => {
       );
 
       // Speak response
-      const speechText = buildSeniorFriendlyTamilSpeech(spokenResponse);
+      const speechText = buildSeniorFriendlyEnglishSpeech(spokenResponse);
       await voiceService.speak(
         speechText,
-        TAMIL_SPEECH_LANGUAGE,
+        ENGLISH_SPEECH_LANGUAGE,
         0.92
       );
 
@@ -328,7 +309,7 @@ export const ElderlyInterface: React.FC = () => {
       const errorMessage: Message = {
         id: `msg_${Date.now() + 1}`,
         role: 'assistant',
-        text: 'மன்னிக்கவும், உங்கள் கோரிக்கையை புரிந்துகொள்ள சிரமம் ஏற்பட்டது. மீண்டும் முயற்சிக்கவும்.',
+        text: 'Sorry, I had trouble understanding your request. Please try again.',
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -339,10 +320,10 @@ export const ElderlyInterface: React.FC = () => {
 
   const handlePlayAudio = async (text: string) => {
     try {
-      const speechText = buildSeniorFriendlyTamilSpeech(text);
+      const speechText = buildSeniorFriendlyEnglishSpeech(text);
       await voiceService.speak(
         speechText,
-        TAMIL_SPEECH_LANGUAGE,
+        ENGLISH_SPEECH_LANGUAGE,
         0.92
       );
     } catch (error) {
@@ -410,10 +391,10 @@ export const ElderlyInterface: React.FC = () => {
   };
 
   const quickActions = [
-    { id: 'q1', label: 'இன்றைய அட்டவணை சொல்லுங்கள்' },
-    { id: 'q2', label: 'நினைவாற்றல் விளையாட்டு தொடங்கு' },
-    { id: 'q3', label: 'பார்கின்சன் பரிசோதனை செய்யவும்' },
-    { id: 'q4', label: 'நான் கவலையாக இருக்கிறேன்' },
+    { id: 'q1', label: 'Tell me my schedule for today' },
+    { id: 'q2', label: 'Start memory game' },
+    { id: 'q3', label: 'Run Parkinson screening' },
+    { id: 'q4', label: 'I am feeling worried' },
   ];
 
   const getRiskBadgeClasses = (riskLevel?: string) => {
@@ -431,23 +412,23 @@ export const ElderlyInterface: React.FC = () => {
       return;
     }
     setShowGameModule(true);
-    void handleUserInput('alzheimer screening செய்யவும்');
+    void handleUserInput('Please run Alzheimer screening');
   };
 
   const triggerParkinsonCheck = () => {
     if (symptomLock) {
       return;
     }
-    void handleUserInput('parkinson screening செய்யவும்');
+    void handleUserInput('Please run Parkinson screening');
   };
 
   const handleQuickAction = (label: string) => {
     if (symptomLock) {
       return;
     }
-    if (label.includes('விளையாட்டு')) {
+    if (label.toLowerCase().includes('game')) {
       setShowGameModule(true);
-      void handleUserInput('alzheimer screening செய்யவும்');
+      void handleUserInput('Please run Alzheimer screening');
       return;
     }
     handleUserInput(label);
@@ -478,12 +459,12 @@ export const ElderlyInterface: React.FC = () => {
       >
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 px-6 py-5 shadow-2xl backdrop-blur-xl">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-slate-50">வரவேற்கிறோம், {state.userName}</h1>
-            <p className="text-slate-200 mt-2">குரல் மூலம் பேசலாம். நான் உடனே பதில் அளிக்கிறேன்.</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-slate-50">Welcome, {state.userName}</h1>
+            <p className="text-slate-200 mt-2">You can speak by voice. I will respond instantly.</p>
           </div>
 
           <div className="flex gap-3">
-            {/* Tamil-Only Speech Mode */}
+            {/* English Speech Mode */}
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -492,7 +473,7 @@ export const ElderlyInterface: React.FC = () => {
               <Globe className="w-5 h-5" />
               <div className="flex flex-col">
                 <span className="text-xs text-cyan-100">Speech Language</span>
-                <span className="text-sm font-semibold text-white">Tamil (தமிழ்)</span>
+                <span className="text-sm font-semibold text-white">English (US)</span>
               </div>
             </motion.div>
 
@@ -643,8 +624,8 @@ export const ElderlyInterface: React.FC = () => {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="w-full max-w-sm rounded-2xl border border-cyan-400/40 bg-slate-900/95 p-6 text-slate-100 shadow-2xl"
           >
-            <h3 className="text-xl font-bold text-cyan-200">மருந்து/நினைவூட்டல் உறுதிப்படுத்தல்</h3>
-            <p className="mt-3 text-sm text-slate-300">இந்த அறிவிப்பை உறுதிப்படுத்தும் வரை திரை முடக்கப்பட்டிருக்கும்.</p>
+            <h3 className="text-xl font-bold text-cyan-200">Medication/Reminder Confirmation</h3>
+            <p className="mt-3 text-sm text-slate-300">The screen remains locked until this reminder is confirmed.</p>
             <div className="mt-5 rounded-xl bg-slate-800 p-4">
               <p className="text-sm text-slate-300">Reminder</p>
               <p className="mt-1 text-lg font-semibold">{activeReminder.title}</p>

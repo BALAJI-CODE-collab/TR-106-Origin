@@ -105,7 +105,7 @@ function App() {
 
               <div className="hidden items-center gap-3 md:flex">
                 <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
-                  Tamil default
+                  English default
                 </div>
                 <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
                   24/7 support
@@ -184,7 +184,7 @@ function App() {
 
             <section className="grid gap-4 pb-8 md:grid-cols-3">
               {[
-                { icon: Globe2, title: 'Language first', desc: 'Tamil is the default, with English available from the selector.' },
+                { icon: Globe2, title: 'Language first', desc: 'English is the default across speech, chatbot, and UI flows.' },
                 { icon: ShieldCheck, title: 'Accessible by design', desc: 'Large controls, readable contrast, and minimal cognitive load.' },
                 { icon: HeartPulse, title: 'Companion mode', desc: 'Designed to support routines, conversations, and quick checks.' },
               ].map((item, idx) => (
