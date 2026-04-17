@@ -1,0 +1,94 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1650 >>
+stream
+BT
+/F1 10 Tf
+40 800 Td
+14 TL
+(Resident Mood Report) Tj
+T*
+(Resident ID: elder_001) Tj
+T*
+(Generated At: 2026-04-16T21:35:11.666998+00:00) Tj
+T*
+(Total Interactions: 49) Tj
+T*
+(Average Happiness: 56.08) Tj
+T*
+(Threshold: 50.0) Tj
+T*
+(Status: stable) Tj
+T*
+() Tj
+T*
+(Recent Timeline:) Tj
+T*
+(2026-04-16T19:57:31.864841+00:00 | neutral | happiness=60.0) Tj
+T*
+(2026-04-16T19:58:16.706779+00:00 | neutral | happiness=60.0) Tj
+T*
+(2026-04-16T20:03:51.972733+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T20:13:02.330405+00:00 | neutral | happiness=61.36) Tj
+T*
+(2026-04-16T20:14:16.555393+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T20:15:24.535435+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T20:15:25.251474+00:00 | anxious | happiness=24.08) Tj
+T*
+(2026-04-16T20:15:25.933734+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T20:15:26.714241+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T20:20:05.153615+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T20:20:06.046738+00:00 | sad | happiness=15.12) Tj
+T*
+(2026-04-16T20:20:06.752200+00:00 | happy | happiness=97.0) Tj
+T*
+(2026-04-16T20:20:07.381358+00:00 | happy | happiness=92.64) Tj
+T*
+(2026-04-16T20:22:15.587250+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T20:22:16.827316+00:00 | anxious | happiness=25.0) Tj
+T*
+(2026-04-16T20:22:17.598335+00:00 | neutral | happiness=61.36) Tj
+T*
+(2026-04-16T20:24:24.103131+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T21:01:12.926105+00:00 | neutral | happiness=55.0) Tj
+T*
+(2026-04-16T21:01:22.166490+00:00 | anxious | happiness=26.44) Tj
+T*
+(2026-04-16T21:01:32.268640+00:00 | anxious | happiness=26.44) Tj
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001943 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2013
+%%EOF

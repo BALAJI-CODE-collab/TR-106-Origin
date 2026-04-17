@@ -1,0 +1,357 @@
+{
+  "resident_id": "elder_001",
+  "generated_at": "2026-04-16T21:35:11.579654+00:00",
+  "total_interactions": 49,
+  "average_happiness": 56.08,
+  "threshold": 50.0,
+  "happy_times": [
+    "2026-04-14T14:25:20.536119+00:00",
+    "2026-04-16T14:25:20.536152+00:00",
+    "2026-04-16T14:50:40.245610+00:00",
+    "2026-04-16T14:51:12.281082+00:00",
+    "2026-04-16T14:51:33.105306+00:00",
+    "2026-04-16T15:19:32.604694+00:00",
+    "2026-04-16T15:20:52.769142+00:00",
+    "2026-04-16T15:22:20.226140+00:00",
+    "2026-04-16T15:24:54.277112+00:00",
+    "2026-04-16T15:25:08.895036+00:00",
+    "2026-04-16T16:08:52.402462+00:00",
+    "2026-04-16T16:12:39.678514+00:00",
+    "2026-04-16T17:26:42.703025+00:00",
+    "2026-04-16T17:29:12.200974+00:00",
+    "2026-04-16T17:48:55.966944+00:00",
+    "2026-04-16T18:22:43.325112+00:00",
+    "2026-04-16T18:22:51.302166+00:00",
+    "2026-04-16T18:56:56.517965+00:00",
+    "2026-04-16T18:57:19.446888+00:00",
+    "2026-04-16T18:57:36.446289+00:00",
+    "2026-04-16T18:57:55.952395+00:00",
+    "2026-04-16T18:58:35.698689+00:00",
+    "2026-04-16T19:18:32.942697+00:00",
+    "2026-04-16T19:21:22.268344+00:00",
+    "2026-04-16T19:30:14.264324+00:00",
+    "2026-04-16T19:51:40.576926+00:00",
+    "2026-04-16T19:57:31.864841+00:00",
+    "2026-04-16T19:58:16.706779+00:00",
+    "2026-04-16T20:03:51.972733+00:00",
+    "2026-04-16T20:13:02.330405+00:00",
+    "2026-04-16T20:14:16.555393+00:00",
+    "2026-04-16T20:15:24.535435+00:00",
+    "2026-04-16T20:15:25.933734+00:00",
+    "2026-04-16T20:15:26.714241+00:00",
+    "2026-04-16T20:20:05.153615+00:00",
+    "2026-04-16T20:20:06.752200+00:00",
+    "2026-04-16T20:20:07.381358+00:00",
+    "2026-04-16T20:22:15.587250+00:00",
+    "2026-04-16T20:22:17.598335+00:00",
+    "2026-04-16T20:24:24.103131+00:00",
+    "2026-04-16T21:01:12.926105+00:00"
+  ],
+  "unhappy_times": [
+    "2026-04-15T14:25:20.536147+00:00",
+    "2026-04-16T15:10:59.669696+00:00",
+    "2026-04-16T16:03:42.270953+00:00",
+    "2026-04-16T20:15:25.251474+00:00",
+    "2026-04-16T20:20:06.046738+00:00",
+    "2026-04-16T20:22:16.827316+00:00",
+    "2026-04-16T21:01:22.166490+00:00",
+    "2026-04-16T21:01:32.268640+00:00"
+  ],
+  "timeline": [
+    {
+      "timestamp": "2026-04-14T14:25:20.536119+00:00",
+      "emotion": "happy",
+      "happiness_score": 97.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-15T14:25:20.536147+00:00",
+      "emotion": "anxious",
+      "happiness_score": 24.08,
+      "is_happy": false
+    },
+    {
+      "timestamp": "2026-04-16T14:25:20.536152+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T14:50:40.245610+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T14:51:12.281082+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T14:51:33.105306+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T15:10:59.669696+00:00",
+      "emotion": "anxious",
+      "happiness_score": 24.08,
+      "is_happy": false
+    },
+    {
+      "timestamp": "2026-04-16T15:19:32.604694+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T15:20:52.769142+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T15:22:20.226140+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T15:24:54.277112+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T15:25:08.895036+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T16:03:42.270953+00:00",
+      "emotion": "anxious",
+      "happiness_score": 24.54,
+      "is_happy": false
+    },
+    {
+      "timestamp": "2026-04-16T16:08:52.402462+00:00",
+      "emotion": "happy",
+      "happiness_score": 93.04,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T16:12:39.678514+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T17:26:42.703025+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T17:29:12.200974+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T17:48:55.966944+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T18:22:43.325112+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T18:22:51.302166+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T18:56:56.517965+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T18:57:19.446888+00:00",
+      "emotion": "happy",
+      "happiness_score": 94.88,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T18:57:36.446289+00:00",
+      "emotion": "happy",
+      "happiness_score": 94.88,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T18:57:55.952395+00:00",
+      "emotion": "happy",
+      "happiness_score": 95.85,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T18:58:35.698689+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T19:18:32.942697+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T19:21:22.268344+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T19:30:14.264324+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T19:51:40.576926+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T19:57:31.864841+00:00",
+      "emotion": "neutral",
+      "happiness_score": 60.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T19:58:16.706779+00:00",
+      "emotion": "neutral",
+      "happiness_score": 60.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:03:51.972733+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:13:02.330405+00:00",
+      "emotion": "neutral",
+      "happiness_score": 61.36,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:14:16.555393+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:15:24.535435+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:15:25.251474+00:00",
+      "emotion": "anxious",
+      "happiness_score": 24.08,
+      "is_happy": false
+    },
+    {
+      "timestamp": "2026-04-16T20:15:25.933734+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:15:26.714241+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:20:05.153615+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:20:06.046738+00:00",
+      "emotion": "sad",
+      "happiness_score": 15.12,
+      "is_happy": false
+    },
+    {
+      "timestamp": "2026-04-16T20:20:06.752200+00:00",
+      "emotion": "happy",
+      "happiness_score": 97.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:20:07.381358+00:00",
+      "emotion": "happy",
+      "happiness_score": 92.64,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:22:15.587250+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:22:16.827316+00:00",
+      "emotion": "anxious",
+      "happiness_score": 25.0,
+      "is_happy": false
+    },
+    {
+      "timestamp": "2026-04-16T20:22:17.598335+00:00",
+      "emotion": "neutral",
+      "happiness_score": 61.36,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T20:24:24.103131+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T21:01:12.926105+00:00",
+      "emotion": "neutral",
+      "happiness_score": 55.0,
+      "is_happy": true
+    },
+    {
+      "timestamp": "2026-04-16T21:01:22.166490+00:00",
+      "emotion": "anxious",
+      "happiness_score": 26.44,
+      "is_happy": false
+    },
+    {
+      "timestamp": "2026-04-16T21:01:32.268640+00:00",
+      "emotion": "anxious",
+      "happiness_score": 26.44,
+      "is_happy": false
+    }
+  ],
+  "status": "stable"
+}
