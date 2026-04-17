@@ -45,33 +45,33 @@ export const EmotionIndicator: React.FC<EmotionIndicatorProps> = ({
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       className={`
-        bg-gradient-to-r ${config.color} rounded-2xl p-8
-        text-white shadow-lg text-center
+        rounded-[28px] border border-white/10 bg-white/95 p-6
+        text-center shadow-2xl backdrop-blur-xl
       `}
     >
       <motion.div
         animate={{ scale: [1, 1.08, 1] }}
         transition={{ repeat: Infinity, duration: 2 }}
-        className="mx-auto mb-4 h-16 w-16 rounded-full border-4 border-white/70 bg-white/20"
+        className={`mx-auto mb-4 h-16 w-16 rounded-full border-4 bg-gradient-to-r ${config.color} border-white/70`}
       />
 
       {/* Message */}
-      <p className="text-2xl font-bold mb-2 capitalize">{emotion}</p>
-      <p className="text-lg opacity-90">{config.message}</p>
-      <p className="mt-1 text-xs uppercase tracking-[0.2em] opacity-80">{config.tone}</p>
+      <p className="mb-2 text-2xl font-bold capitalize text-slate-800">{emotion}</p>
+      <p className="text-lg text-slate-600">{config.message}</p>
+      <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">{config.tone}</p>
 
       {/* Intensity Bar */}
       {score !== 0 && (
         <div className="mt-4">
-          <div className="w-full bg-white bg-opacity-30 rounded-full h-4 overflow-hidden">
+          <div className="h-4 w-full overflow-hidden rounded-full bg-slate-200">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${Math.min(absoluteScore, 100)}%` }}
               transition={{ duration: 0.8 }}
-              className="h-full bg-white bg-opacity-70"
+              className={`h-full bg-gradient-to-r ${config.color}`}
             />
           </div>
-          <p className="text-xs mt-2 opacity-90">
+          <p className="mt-2 text-xs text-slate-500">
             Intensity: {Math.round(absoluteScore)}%
           </p>
         </div>

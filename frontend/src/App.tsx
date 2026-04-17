@@ -132,7 +132,7 @@ function App() {
                     Central dashboard for <span className="text-cyan-300">users</span>, <span className="text-orange-300">guardians</span>, and <span className="text-emerald-300">admin</span>.
                   </h2>
                   <p className="max-w-2xl text-base leading-8 text-slate-300 md:text-lg">
-                    Same premium UI/UX, now focused as a practical opening dashboard. Choose the portal you want and continue instantly.
+                    Choose the portal you want and continue instantly.
                   </p>
                 </div>
 

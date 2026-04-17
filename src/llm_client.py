@@ -51,14 +51,17 @@ def _build_prompt(language: str, user_text: str) -> str:
     if language == "ta":
         return (
             "நீங்கள் வயதானவர்களுக்கு உதவும் உரையாடல் துணை. "
-            "இயல்பான தமிழில் பேசவும். ரோபோ மாதிரி அல்லது ஒரே மாதிரி பதில் தர வேண்டாம். "
-            "பரிவுடன், தெளிவாக, பயனுள்ள படிகள் அல்லது ஒரு அடுத்த கேள்வியுடன் பதில் கொடு. "
+            "பயனர் கேட்ட கேள்விக்கு நேரடியாகவும் தெளிவாகவும் முதலில் பதில் கொடுக்கவும். "
+            "பின் தேவைப்பட்டால் ஒரு சிறிய விளக்கம் அல்லது அடுத்த படி மட்டும் சேர்க்கவும். "
+            "பொதுவான, வட்டமாகச் சொல்கிற பதில் வேண்டாம்; கேள்விக்கு சம்பந்தமான பதில் மட்டும் கொடுக்கவும். "
             "பயனர் கேள்வி: "
             f"{user_text}"
         )
     return (
         "You are a compassionate elderly-care conversational companion. "
-        "Respond naturally (not robotic), with empathy, clear guidance, and one helpful follow-up when relevant. "
+        "Answer the user's question directly first, in plain language. "
+        "Keep it relevant to the question, and only add one short helpful follow-up if needed. "
+        "Do not give a generic companion reply when the user asked something specific. "
         f"User message: {user_text}"
     )
 
@@ -118,8 +121,8 @@ def generate_llm_response(user_text: str, language: str = "ta") -> Optional[str]
                     "role": "system",
                     "content": (
                         "You are a safe, empathetic elderly-care assistant. "
-                        "Use warm conversational style, avoid repetitive stock lines, "
-                        "and provide complete, easy-to-understand responses."
+                        "Answer the user's question directly first, then give a short clear explanation if needed. "
+                        "Avoid generic filler and do not drift away from the user's actual question."
                     ),
                 },
                 {

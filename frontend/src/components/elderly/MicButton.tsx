@@ -25,11 +25,11 @@ export const MicButton: React.FC<MicButtonProps> = ({
         onClick={isListening ? onStopListening : onStartListening}
         disabled={isProcessing}
         className={`
-          relative w-32 h-32 rounded-full flex items-center justify-center
-          text-white font-bold text-xl transition-all
+          relative flex h-36 w-36 items-center justify-center rounded-full
+          text-white text-xl font-bold transition-all
           ${isListening 
-            ? 'bg-red-500 hover:bg-red-600 shadow-2xl' 
-            : 'bg-blue-600 hover:bg-blue-700 shadow-lg'
+            ? 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-500 shadow-[0_24px_80px_rgba(239,68,68,0.35)]' 
+            : 'bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 shadow-[0_24px_80px_rgba(37,99,235,0.25)]'
           }
           ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
         `}
@@ -40,23 +40,26 @@ export const MicButton: React.FC<MicButtonProps> = ({
             <motion.div
               animate={{ scale: [1, 1.3], opacity: [1, 0] }}
               transition={{ duration: 1.5, repeat: Infinity }}
-              className="absolute inset-0 rounded-full bg-red-400"
+              className="absolute inset-0 rounded-full bg-rose-400"
             />
             <motion.div
               animate={{ scale: [1, 1.2], opacity: [0.5, 0] }}
               transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
-              className="absolute inset-0 rounded-full bg-red-400"
+              className="absolute inset-0 rounded-full bg-rose-400"
             />
           </>
         )}
 
         {/* Icon */}
-        <div className="relative z-10">
+        <div className="relative z-10 flex flex-col items-center gap-2">
           {isListening ? (
-            <Square className="w-12 h-12" fill="white" />
+            <Square className="h-12 w-12" fill="white" />
           ) : (
-            <Mic className="w-12 h-12" />
+            <Mic className="h-12 w-12" />
           )}
+          <span className="text-xs font-semibold uppercase tracking-[0.28em] opacity-85">
+            {isListening ? 'Stop' : 'Speak'}
+          </span>
         </div>
       </motion.button>
 
@@ -66,7 +69,7 @@ export const MicButton: React.FC<MicButtonProps> = ({
           {isProcessing ? 'Processing...' : isListening ? 'Listening...' : 'Tap to speak'}
         </p>
         {isListening && (
-          <p className="text-sm text-blue-600 mt-2 font-medium animate-pulse">
+          <p className="mt-2 animate-pulse text-sm font-medium text-blue-600">
             Listening for your voice...
           </p>
         )}
@@ -74,7 +77,7 @@ export const MicButton: React.FC<MicButtonProps> = ({
 
       {/* Audio Wave Animation */}
       {isListening && (
-        <div className="flex gap-1 h-8 items-center">
+        <div className="flex h-8 items-center gap-1">
           {[...Array(5)].map((_, i) => (
             <motion.div
               key={i}
@@ -84,7 +87,7 @@ export const MicButton: React.FC<MicButtonProps> = ({
                 repeat: Infinity,
                 delay: i * 0.1,
               }}
-              className="w-1 bg-blue-600 rounded-full"
+              className="w-1 rounded-full bg-blue-600"
             />
           ))}
         </div>

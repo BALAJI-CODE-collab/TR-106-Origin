@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { AlertTriangle, TrendingUp, Heart, Brain, LogOut } from 'lucide-react';
-import { apiClient, AlzheimerPrediction, ParkinsonPrediction, ResidentProfile, UserStats } from '../../services/api';
+import { apiClient, AlzheimerPrediction, GameAssessmentReport, ParkinsonPrediction, ResidentProfile, UserStats } from '../../services/api';
 import { AlzheimerRisk } from '../AlzheimerRisk';
+
+type CareItemStatus = 'taken' | 'missed' | 'unknown';
 
 interface UserData {
   userId: string;
@@ -39,6 +41,26 @@ export const CaregiverDashboard: React.FC = () => {
   const [loadingResidentData, setLoadingResidentData] = useState(false);
   const [notifications, setNotifications] = useState<ToastNotification[]>([]);
   const [selectedRange, setSelectedRange] = useState<'today' | 'week' | 'month'>('today');
+  const [dailyCareStatus, setDailyCareStatus] = useState<{
+    breakfast: CareItemStatus;
+    lunch: CareItemStatus;
+    dinner: CareItemStatus;
+    tablets: CareItemStatus;
+    water: CareItemStatus;
+    notes: string;
+  }>({
+    breakfast: 'unknown',
+    lunch: 'unknown',
+    dinner: 'unknown',
+    tablets: 'unknown',
+    water: 'unknown',
+    notes: '',
+  });
+  const [submittingDailyCareStatus, setSubmittingDailyCareStatus] = useState(false);
+  const [gameReports, setGameReports] = useState<GameAssessmentReport[]>([]);
+  const [showMailFailuresOnly, setShowMailFailuresOnly] = useState(false);
+  const [reportDateRange, setReportDateRange] = useState<'all' | '7d' | '30d'>('all');
+  const [retryingReportKey, setRetryingReportKey] = useState('');
   const [userData, setUserData] = useState<UserData>({
     userId: 'elder_001',
     name: 'Grandpa',
@@ -112,12 +134,188 @@ export const CaregiverDashboard: React.FC = () => {
     { id: 'month', label: 'Month' },
   ];
 
+  const visibleGameReports = useMemo(() => {
+    const now = Date.now();
+    const filteredByDate = gameReports.filter((report) => {
+      if (reportDateRange === 'all') {
+        return true;
+      }
+      const reportTime = new Date(report.sent_at || '').getTime();
+      if (Number.isNaN(reportTime)) {
+        return false;
+      }
+      const maxAgeMs = reportDateRange === '7d' ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+      return now - reportTime <= maxAgeMs;
+    });
+
+    if (!showMailFailuresOnly) {
+      return filteredByDate;
+    }
+    return filteredByDate.filter((report) => report.mail_status !== 'sent');
+  }, [gameReports, reportDateRange, showMailFailuresOnly]);
+
+  const retryCountByOriginalSentAt = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const report of gameReports) {
+      const details = report.details || {};
+      const originalSentAt = typeof details.retry_of_sent_at === 'string' ? details.retry_of_sent_at : '';
+      if (!originalSentAt) {
+        continue;
+      }
+      counts[originalSentAt] = (counts[originalSentAt] || 0) + 1;
+    }
+    return counts;
+  }, [gameReports]);
+
+  const loadGameReports = async (residentId: string) => {
+    const reportResult = await apiClient.getGameAssessmentReports(residentId, 50);
+    setGameReports(reportResult);
+  };
+
+  const handleRetryGameReportMail = async (report: GameAssessmentReport) => {
+    const key = `${report.sent_at}_${report.game_name}`;
+    setRetryingReportKey(key);
+    try {
+      const result = await apiClient.retryGameAssessmentMail({
+        resident_id: report.resident_id,
+        sent_at: report.sent_at,
+        game_name: report.game_name,
+      });
+
+      const status = result?.mail?.status;
+      if (status === 'sent') {
+        pushNotification('Retry mail sent successfully.', 'success');
+      } else if (status === 'logged_only_no_smtp') {
+        pushNotification('Retry saved, but SMTP is not configured.', 'warning');
+      } else {
+        pushNotification('Retry attempted, but mail delivery still failed.', 'warning');
+      }
+
+      await loadGameReports(report.resident_id);
+    } catch (error) {
+      console.error(error);
+      pushNotification('Failed to retry game report mail.', 'error');
+    } finally {
+      setRetryingReportKey('');
+    }
+  };
+
+  const exportVisibleGameReportsCsv = () => {
+    if (!visibleGameReports.length) {
+      pushNotification('No game reports to export for current filter.', 'warning');
+      return;
+    }
+
+    const escapeCsv = (value: unknown): string => {
+      const text = String(value ?? '');
+      if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    };
+
+    const header = [
+      'resident_id',
+      'sent_at',
+      'game_name',
+      'mail_status',
+      'recipients',
+      'mail_errors',
+      'risk_level',
+      'risk_score',
+      'dementia_recall',
+      'dementia_orientation',
+      'dementia_attention',
+      'dementia_composite',
+      'speech_therapy_clarity',
+      'speech_therapy_pace',
+      'speech_therapy_stability',
+      'speech_therapy_composite',
+    ];
+
+    const rows = visibleGameReports.map((report) => {
+      const details = report.details || {};
+      return [
+        report.resident_id,
+        report.sent_at,
+        report.game_name,
+        report.mail_status,
+        (report.mail_sent_to || []).join('; '),
+        (report.mail_errors || []).join('; '),
+        details.risk_level ?? '',
+        details.risk_score ?? '',
+        details.dementia_recall ?? '',
+        details.dementia_orientation ?? '',
+        details.dementia_attention ?? '',
+        details.dementia_composite ?? '',
+        details.speech_therapy_clarity ?? '',
+        details.speech_therapy_pace ?? '',
+        details.speech_therapy_stability ?? '',
+        details.speech_therapy_composite ?? '',
+      ];
+    });
+
+    const csv = [header, ...rows].map((row) => row.map((cell) => escapeCsv(cell)).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `game_reports_${selectedResidentId || 'resident'}_${Date.now()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    pushNotification(`Exported ${visibleGameReports.length} game report rows.`, 'success');
+  };
+
   const pushNotification = (text: string, type: ToastNotification['type'] = 'info') => {
     const id = `ntf_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     setNotifications((prev) => [...prev, { id, text, type }]);
     window.setTimeout(() => {
       setNotifications((prev) => prev.filter((item) => item.id !== id));
     }, 5000);
+  };
+
+  const handleDailyCareStatusSubmit = async () => {
+    if (!selectedResidentId) {
+      pushNotification('Select a resident before sending daily care mail.', 'warning');
+      return;
+    }
+
+    setSubmittingDailyCareStatus(true);
+    try {
+      const result = await apiClient.submitDailyCareStatus({
+        resident_id: selectedResidentId,
+        breakfast: dailyCareStatus.breakfast,
+        lunch: dailyCareStatus.lunch,
+        dinner: dailyCareStatus.dinner,
+        tablets: dailyCareStatus.tablets,
+        water: dailyCareStatus.water,
+        notes: dailyCareStatus.notes,
+      });
+
+      const mailStatus = result?.mail?.status;
+      if (mailStatus === 'logged_only_no_smtp') {
+        pushNotification('Daily care saved, but SMTP is not configured. Set SMTP_HOST or MAIL_HOST and SMTP_FROM or MAIL_FROM.', 'warning');
+        return;
+      }
+      if (mailStatus === 'logged_only_mail_failed') {
+        pushNotification('Daily care saved, but mail delivery failed. Check SMTP settings.', 'warning');
+        return;
+      }
+
+      if (result?.missing_items?.length) {
+        pushNotification(`Alert mail sent. Missed: ${result.missing_items.join(', ')}`, 'warning');
+      } else {
+        pushNotification('Daily care update mail sent successfully.', 'success');
+      }
+    } catch (error) {
+      console.error(error);
+      pushNotification('Failed to send daily care status mail.', 'error');
+    } finally {
+      setSubmittingDailyCareStatus(false);
+    }
   };
 
   const handleGuardianLogin = async () => {
@@ -157,6 +355,7 @@ export const CaregiverDashboard: React.FC = () => {
         setSummary(summaryResult);
         setAlzheimerPrediction(alzheimerResult);
         setParkinsonPrediction(parkinsonResult);
+        await loadGameReports(selectedResidentId);
 
         const resident = residents.find((r) => r.resident_id === selectedResidentId);
         const dominantEmotion = Object.entries(statsResult.emotion_distribution || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || 'neutral';
@@ -173,6 +372,7 @@ export const CaregiverDashboard: React.FC = () => {
         console.error(error);
         setAlzheimerPrediction(null);
         setParkinsonPrediction(null);
+        setGameReports([]);
       } finally {
         setLoadingResidentData(false);
       }
@@ -180,6 +380,18 @@ export const CaregiverDashboard: React.FC = () => {
 
     void loadResidentAnalytics();
   }, [isAuthorized, selectedResidentId, residents]);
+
+  useEffect(() => {
+    if (!isAuthorized || !selectedResidentId) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void loadGameReports(selectedResidentId);
+    }, 30000);
+
+    return () => window.clearInterval(timer);
+  }, [isAuthorized, selectedResidentId]);
 
   if (!isAuthorized) {
     return (
@@ -359,6 +571,203 @@ export const CaregiverDashboard: React.FC = () => {
             Updating resident analytics...
           </div>
         )}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative z-10 mx-auto mb-8 max-w-7xl"
+      >
+        <div className="rounded-2xl border border-white/15 bg-white/10 p-6 text-white shadow-2xl backdrop-blur-xl">
+          <h3 className="mb-2 text-xl font-bold">Daily Care Mail Pipeline</h3>
+          <p className="mb-4 text-sm text-slate-300">
+            Send a status mail to children and guardians for meals, tablets, and water. Missed items are auto-marked as alert.
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            {([
+              ['breakfast', 'Breakfast'],
+              ['lunch', 'Lunch'],
+              ['dinner', 'Dinner'],
+              ['tablets', 'Tablets'],
+              ['water', 'Water'],
+            ] as Array<[keyof typeof dailyCareStatus, string]>).map(([key, label]) => (
+              <div key={key} className="rounded-xl border border-white/15 bg-slate-900/40 p-3">
+                <p className="mb-2 text-sm font-semibold text-slate-200">{label}</p>
+                <select
+                  value={dailyCareStatus[key] as string}
+                  onChange={(e) =>
+                    setDailyCareStatus((prev) => ({
+                      ...prev,
+                      [key]: e.target.value as CareItemStatus,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/20 bg-slate-800 px-3 py-2 text-sm text-white outline-none"
+                >
+                  <option value="unknown">Unknown</option>
+                  <option value="taken">Taken</option>
+                  <option value="missed">Missed</option>
+                </select>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-2 block text-sm font-semibold text-slate-200">Notes</label>
+            <textarea
+              value={dailyCareStatus.notes}
+              onChange={(e) => setDailyCareStatus((prev) => ({ ...prev, notes: e.target.value }))}
+              placeholder="Optional notes for today..."
+              className="min-h-[90px] w-full rounded-xl border border-white/20 bg-slate-900/50 px-4 py-3 text-sm text-white outline-none"
+            />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleDailyCareStatusSubmit}
+              disabled={submittingDailyCareStatus}
+              className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submittingDailyCareStatus ? 'Sending...' : 'Send Daily Care Mail'}
+            </button>
+            <p className="text-xs text-slate-300">This action also stores a daily care log in backend records.</p>
+          </div>
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative z-10 mx-auto mb-8 max-w-7xl"
+      >
+        <div className="rounded-2xl border border-white/15 bg-white/10 p-6 text-white shadow-2xl backdrop-blur-xl">
+          <h3 className="mb-2 text-xl font-bold">Dementia and Speech Therapy Game Reports</h3>
+          <p className="mb-4 text-sm text-slate-300">
+            Real score reports from completed games and whether mail reached children/guardians.
+          </p>
+
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setShowMailFailuresOnly((prev) => !prev)}
+              className={`rounded-xl border px-4 py-2 text-xs font-semibold transition ${
+                showMailFailuresOnly
+                  ? 'border-amber-300/60 bg-amber-500/25 text-amber-100'
+                  : 'border-white/20 bg-white/10 text-slate-100 hover:bg-white/20'
+              }`}
+            >
+              {showMailFailuresOnly ? 'Showing Mail Failures Only' : 'Show Mail Failures Only'}
+            </button>
+            <button
+              onClick={exportVisibleGameReportsCsv}
+              className="rounded-xl border border-cyan-300/40 bg-cyan-500/20 px-4 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/30"
+            >
+              Export CSV
+            </button>
+            <div className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs text-slate-100">
+              <span className="mr-2 text-slate-300">Date Range:</span>
+              <select
+                value={reportDateRange}
+                onChange={(e) => setReportDateRange(e.target.value as 'all' | '7d' | '30d')}
+                className="bg-transparent font-semibold outline-none"
+              >
+                <option value="all" className="text-slate-900">All</option>
+                <option value="7d" className="text-slate-900">Last 7 days</option>
+                <option value="30d" className="text-slate-900">Last 30 days</option>
+              </select>
+            </div>
+            <span className="text-xs text-slate-300">
+              Rows: {visibleGameReports.length} / {gameReports.length}
+            </span>
+            <span className="text-xs text-slate-400">Auto-refresh: 30s</span>
+          </div>
+
+          {visibleGameReports.length === 0 ? (
+            <div className="rounded-xl border border-white/15 bg-slate-900/40 p-4 text-sm text-slate-200">
+              {gameReports.length === 0
+                ? 'No game reports yet for this resident.'
+                : 'No rows match the current filter.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-white/15 bg-slate-900/40">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-white/15 text-slate-300">
+                  <tr>
+                    <th className="px-4 py-3">Time</th>
+                    <th className="px-4 py-3">Game</th>
+                    <th className="px-4 py-3">Key Scores</th>
+                    <th className="px-4 py-3">Mail Status</th>
+                    <th className="px-4 py-3">Retry History</th>
+                    <th className="px-4 py-3">Recipients</th>
+                    <th className="px-4 py-3">Mail Errors</th>
+                    <th className="px-4 py-3">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleGameReports.map((report, index) => {
+                    const details = report.details || {};
+                    const scoreSummary =
+                      report.game_name.toLowerCase().includes('dementia')
+                        ? `Recall ${details.dementia_recall ?? '-'}, Orientation ${details.dementia_orientation ?? '-'}, Attention ${details.dementia_attention ?? '-'}, Composite ${details.dementia_composite ?? '-'}`
+                        : `Clarity ${details.speech_therapy_clarity ?? '-'}, Pace ${details.speech_therapy_pace ?? '-'}, Stability ${details.speech_therapy_stability ?? '-'}, Composite ${details.speech_therapy_composite ?? '-'}`;
+
+                    const statusClass =
+                      report.mail_status === 'sent'
+                        ? 'bg-emerald-500/25 text-emerald-100 border-emerald-300/40'
+                        : report.mail_status === 'logged_only_no_smtp'
+                          ? 'bg-amber-500/25 text-amber-100 border-amber-300/40'
+                          : 'bg-rose-500/25 text-rose-100 border-rose-300/40';
+
+                    const reportKey = `${report.sent_at}_${report.game_name}`;
+                    const canRetry = report.mail_status !== 'sent';
+                    const retryCount = retryCountByOriginalSentAt[report.sent_at || ''] || 0;
+
+                    return (
+                      <tr key={`${report.sent_at}_${index}`} className="border-b border-white/10 last:border-b-0">
+                        <td className="px-4 py-3 text-slate-200">{report.sent_at ? new Date(report.sent_at).toLocaleString() : '-'}</td>
+                        <td className="px-4 py-3 font-semibold text-white">{report.game_name}</td>
+                        <td className="px-4 py-3 text-slate-200">{scoreSummary}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass}`}>
+                            {report.mail_status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+                              retryCount > 0
+                                ? 'border-cyan-300/40 bg-cyan-500/20 text-cyan-100'
+                                : 'border-white/20 bg-white/10 text-slate-300'
+                            }`}
+                          >
+                            {retryCount > 0 ? `${retryCount} retr${retryCount === 1 ? 'y' : 'ies'}` : 'No retries'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-200">
+                          {report.mail_sent_to?.length ? report.mail_sent_to.join(', ') : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-200">
+                          {report.mail_errors?.length ? report.mail_errors.join(' | ') : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {canRetry ? (
+                            <button
+                              onClick={() => void handleRetryGameReportMail(report)}
+                              disabled={retryingReportKey === reportKey}
+                              className="rounded-lg border border-amber-300/40 bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-100 hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {retryingReportKey === reportKey ? 'Retrying...' : 'Retry Mail'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">Delivered</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </motion.div>
 
       {/* Key Metrics */}

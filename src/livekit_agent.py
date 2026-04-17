@@ -7,6 +7,7 @@ from livekit.agents import Agent, AgentServer, AgentSession, JobContext, inferen
 from livekit.plugins import silero
 
 from src.decision_engine import DecisionEngine
+from src.main_app_alzheimer_integration_example import after_speech_to_text_pipeline
 
 
 class CareVoiceAgent(Agent):
@@ -31,6 +32,21 @@ class CareVoiceAgent(Agent):
         if not user_text:
             return
 
+        cognitive_data = {
+            "session_id": self.session_id,
+            "user_id": "elder_001",
+            "text_length": len(user_text),
+            "word_count": len(user_text.split()),
+        }
+        alzheimer_result = after_speech_to_text_pipeline(user_text, cognitive_data)
+        if isinstance(alzheimer_result, dict) and alzheimer_result.get("ok") and alzheimer_result.get("risk_score"):
+            risk_score = alzheimer_result["risk_score"]
+            cognitive_data.update({
+                "alzheimer_risk_score": risk_score.get("risk_score"),
+                "alzheimer_risk_level": risk_score.get("risk_level"),
+                "alzheimer_confidence": risk_score.get("confidence"),
+            })
+
         result = self.engine.process_interaction(
             user_id="elder_001",
             user_text=user_text,
@@ -39,6 +55,7 @@ class CareVoiceAgent(Agent):
             reminder_missed=False,
             session_id=self.session_id,
             now=datetime.now(timezone.utc),
+            cognitive_data=cognitive_data,
         )
 
         print("User text:", user_text)

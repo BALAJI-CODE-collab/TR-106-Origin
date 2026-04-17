@@ -11,6 +11,7 @@ vaderSentiment==3.3.2
 pyttsx3==2.90
 python-dotenv==1.0.0
 cryptography>=42.0.0
+reportlab>=4.0.0
 
 # Optional ML Module Integration
 # Uncomment if using Alzheimer detection module

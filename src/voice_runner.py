@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from src.decision_engine import DecisionEngine
 from src.alzheimer_bridge import safe_evaluate_alzheimer
+from src.main_app_alzheimer_integration_example import after_speech_to_text_pipeline
 from src.modules.tts_output import EmpatheticTextToSpeech
 from src.modules.mic_capture import MicrophoneCapture
 from src.modules.stt_whisper import WhisperSTT
@@ -46,8 +47,16 @@ def process_text(
         "text_length": len(text),
         "word_count": len(text.split()),
     }
-    alzheimer_result = safe_evaluate_alzheimer(text, cognitive_data)
+    alzheimer_result = after_speech_to_text_pipeline(text, cognitive_data)
     print("Alzheimer risk:", alzheimer_result)
+
+    if isinstance(alzheimer_result, dict) and alzheimer_result.get("ok") and alzheimer_result.get("risk_score"):
+        risk_score = alzheimer_result["risk_score"]
+        cognitive_data.update({
+            "alzheimer_risk_score": risk_score.get("risk_score"),
+            "alzheimer_risk_level": risk_score.get("risk_level"),
+            "alzheimer_confidence": risk_score.get("confidence"),
+        })
 
     result = engine.process_interaction(
         user_id=user_id,

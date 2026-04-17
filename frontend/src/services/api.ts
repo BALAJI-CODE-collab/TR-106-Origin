@@ -118,12 +118,70 @@ export interface GuardianLoginResponse {
   guardian_email?: string;
 }
 
+export interface AdminMoodTimelinePoint {
+  timestamp: string;
+  emotion: string;
+  happiness_score: number;
+  is_happy: boolean;
+}
+
+export interface AdminResidentReport {
+  resident_id: string;
+  generated_at: string;
+  total_interactions: number;
+  average_happiness: number;
+  threshold: number;
+  status: 'below_threshold' | 'stable' | string;
+  happy_times: string[];
+  unhappy_times: string[];
+  timeline: AdminMoodTimelinePoint[];
+  low_happiness_mail_sent?: boolean;
+  json_path?: string;
+}
+
+export interface DailyCareStatusPayload {
+  resident_id: string;
+  breakfast: 'taken' | 'missed' | 'unknown';
+  lunch: 'taken' | 'missed' | 'unknown';
+  dinner: 'taken' | 'missed' | 'unknown';
+  tablets: 'taken' | 'missed' | 'unknown';
+  water: 'taken' | 'missed' | 'unknown';
+  notes?: string;
+}
+
+export interface GameAssessmentReport {
+  resident_id: string;
+  sent_at: string;
+  game_name: string;
+  reason: string;
+  details: Record<string, any>;
+  mail_status: 'sent' | 'logged_only_no_smtp' | 'logged_only_mail_failed' | string;
+  mail_sent_to: string[];
+  mail_errors: string[];
+  smtp?: {
+    configured?: boolean;
+    host?: string;
+    port?: number;
+    from?: string;
+    protocol?: string;
+    use_ssl?: boolean;
+    starttls_enabled?: boolean;
+  };
+}
+
+export interface RetryGameAssessmentMailPayload {
+  resident_id: string;
+  sent_at: string;
+  game_name?: string;
+}
+
 class APIClient {
   async processInteraction(
     text: string,
     userId: string,
     sessionId: string,
-    language: 'en' | 'ta' = 'en'
+    language: 'en' | 'ta' = 'en',
+    cognitiveData?: Record<string, any>
   ): Promise<DecisionOutput> {
     try {
       const response = await axios.post(`${API_BASE_URL}/process`, {
@@ -131,6 +189,7 @@ class APIClient {
         user_id: userId,
         session_id: sessionId,
         language,
+        cognitive_data: cognitiveData,
       });
       return response.data;
     } catch (error) {
@@ -240,7 +299,9 @@ class APIClient {
   async escalateAlert(payload: {
     resident_id: string;
     reason: string;
-    symptoms: string[];
+    symptoms?: string[];
+    category?: string;
+    details?: Record<string, any>;
     reminder_id?: string;
     no_response_seconds?: number;
   }): Promise<any> {
@@ -249,6 +310,66 @@ class APIClient {
       return response.data;
     } catch (error) {
       throw new Error(`Failed to escalate alert: ${error}`);
+    }
+  }
+
+  async getAdminResidentReport(userId: string): Promise<AdminResidentReport> {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/admin/resident-report/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to fetch admin resident report: ${error}`);
+    }
+  }
+
+  async downloadAdminResidentPdf(userId: string): Promise<Blob> {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/admin/resident-report/${userId}/pdf`, {
+        responseType: 'blob',
+      });
+      return response.data as Blob;
+    } catch (error) {
+      throw new Error(`Failed to download resident PDF report: ${error}`);
+    }
+  }
+
+  async downloadAdminResidentJson(userId: string): Promise<Blob> {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/admin/resident-report/${userId}/json`, {
+        responseType: 'blob',
+      });
+      return response.data as Blob;
+    } catch (error) {
+      throw new Error(`Failed to download resident JSON report: ${error}`);
+    }
+  }
+
+  async submitDailyCareStatus(payload: DailyCareStatusPayload): Promise<any> {
+    try {
+      const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/caregiver/daily-care-status`, payload);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to submit daily care status: ${error}`);
+    }
+  }
+
+  async getGameAssessmentReports(residentId: string, limit: number = 20): Promise<GameAssessmentReport[]> {
+    try {
+      const response = await axios.get(`${API_BASE_URL.replace('/api', '')}/api/caregiver/game-reports/${residentId}`, {
+        params: { limit },
+      });
+      return response.data?.reports || [];
+    } catch (error) {
+      throw new Error(`Failed to fetch game assessment reports: ${error}`);
+    }
+  }
+
+  async retryGameAssessmentMail(payload: RetryGameAssessmentMailPayload): Promise<any> {
+    try {
+      const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/caregiver/game-reports/retry-mail`, payload);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to retry game assessment mail: ${error}`);
     }
   }
 }

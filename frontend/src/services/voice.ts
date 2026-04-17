@@ -19,6 +19,29 @@ class VoiceService {
   private recognition: any;
   private isListening: boolean = false;
   private currentLanguage: string = 'en-US';
+  private latestInterim: string = '';
+  private heardFinalInSession: boolean = false;
+  private watchdogTimer: number | null = null;
+  private speechEndStopTimer: number | null = null;
+
+  private isLocalhost(): boolean {
+    const host = window.location.hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  }
+
+  getRecognitionDiagnostics(): {
+    supported: boolean;
+    secureContext: boolean;
+    localhost: boolean;
+    language: string;
+  } {
+    return {
+      supported: Boolean(this.recognition),
+      secureContext: window.isSecureContext,
+      localhost: this.isLocalhost(),
+      language: this.currentLanguage,
+    };
+  }
 
   private findBestTamilVoice(): SpeechSynthesisVoice | null {
     if (!window.speechSynthesis) {
@@ -98,8 +121,9 @@ class VoiceService {
     if (SpeechRecognition) {
       this.recognition = new SpeechRecognition();
       this.recognition.continuous = config?.continuous || false;
-      this.recognition.interimResults = config?.interimResults || true;
+      this.recognition.interimResults = config?.interimResults ?? true;
       this.recognition.lang = config?.language || this.currentLanguage;
+      this.recognition.maxAlternatives = 1;
     } else {
       console.warn('Speech Recognition not supported in this browser');
     }
@@ -108,59 +132,190 @@ class VoiceService {
   /**
    * Start listening for speech
    */
-  startListening(onResult: (result: SpeechResult) => void, onError: (error: string) => void): void {
+  async startListening(onResult: (result: SpeechResult) => void, onError: (error: string) => void): Promise<void> {
     if (!this.recognition) {
-      onError('Speech Recognition not available');
+      onError('Speech recognition is not available in this browser. Please use latest Chrome or Edge.');
       return;
     }
 
+    if (!window.isSecureContext && !this.isLocalhost()) {
+      onError('Voice input requires HTTPS (or localhost). Open this app on https:// or localhost.');
+      return;
+    }
+
+    try {
+      // Proactively request microphone permission to avoid silent recognition failures.
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    } catch (error: any) {
+      const message = error?.name === 'NotAllowedError'
+        ? 'Microphone permission denied. Please allow mic access in browser settings.'
+        : 'Microphone access failed. Please check your input device.';
+      onError(message);
+      return;
+    }
+
+    if (this.isListening) {
+      try {
+        this.recognition.stop();
+      } catch (error) {
+        console.warn('Recognition stop before restart failed:', error);
+      }
+    }
+
     this.isListening = true;
+    this.latestInterim = '';
+    this.heardFinalInSession = false;
+    this.recognition.lang = this.currentLanguage;
+
+    if (this.watchdogTimer) {
+      window.clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+    if (this.speechEndStopTimer) {
+      window.clearTimeout(this.speechEndStopTimer);
+      this.speechEndStopTimer = null;
+    }
+
+    const armWatchdog = () => {
+      if (this.watchdogTimer) {
+        window.clearTimeout(this.watchdogTimer);
+      }
+      this.watchdogTimer = window.setTimeout(() => {
+        if (this.isListening) {
+          try {
+            this.recognition.stop();
+          } catch (error) {
+            console.warn('Failed to stop recognition from watchdog:', error);
+          }
+        }
+      }, 9000);
+    };
 
     this.recognition.onstart = () => {
       console.log('Voice input started');
+      armWatchdog();
     };
 
     this.recognition.onresult = (event: any) => {
       let interimTranscript = '';
       let finalTranscript = '';
+      let latestConfidence = 0;
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         const confidence = event.results[i][0].confidence;
+        latestConfidence = confidence || latestConfidence;
 
         if (event.results[i].isFinal) {
           finalTranscript += transcript + ' ';
         } else {
           interimTranscript += transcript;
         }
-
-        if (event.results[i].isFinal) {
-          onResult({
-            text: finalTranscript.trim(),
-            isFinal: true,
-            confidence: confidence,
-          });
-        } else {
-          onResult({
-            text: interimTranscript,
-            isFinal: false,
-            confidence: confidence,
-          });
-        }
       }
+
+      if (interimTranscript.trim()) {
+        this.latestInterim = interimTranscript.trim();
+        armWatchdog();
+        onResult({
+          text: this.latestInterim,
+          isFinal: false,
+          confidence: latestConfidence,
+        });
+      }
+
+      const finalText = finalTranscript.trim();
+      if (finalText) {
+        this.heardFinalInSession = true;
+        this.latestInterim = '';
+        armWatchdog();
+        onResult({
+          text: finalText,
+          isFinal: true,
+          confidence: latestConfidence,
+        });
+      }
+    };
+
+    this.recognition.onspeechend = () => {
+      // Delay stop slightly so late final results are not cut off.
+      if (!this.isListening) {
+        return;
+      }
+      if (this.speechEndStopTimer) {
+        window.clearTimeout(this.speechEndStopTimer);
+      }
+      this.speechEndStopTimer = window.setTimeout(() => {
+        if (this.isListening) {
+          try {
+            this.recognition.stop();
+          } catch (error) {
+            console.warn('Failed to stop after speech end:', error);
+          }
+        }
+      }, 700);
+    };
+
+    this.recognition.onnomatch = () => {
+      onError('Could not understand speech. Please speak clearly and try again.');
     };
 
     this.recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
+      this.isListening = false;
+      if (this.watchdogTimer) {
+        window.clearTimeout(this.watchdogTimer);
+        this.watchdogTimer = null;
+      }
+      if (event.error === 'no-speech') {
+        onError('No speech detected. Please speak a little louder and try again.');
+        return;
+      }
+      if (event.error === 'audio-capture') {
+        onError('No microphone input detected. Check your selected microphone device.');
+        return;
+      }
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        onError('Microphone blocked. Please allow microphone permission for this site.');
+        return;
+      }
       onError(`Error: ${event.error}`);
     };
 
     this.recognition.onend = () => {
+      if (this.watchdogTimer) {
+        window.clearTimeout(this.watchdogTimer);
+        this.watchdogTimer = null;
+      }
+      if (this.speechEndStopTimer) {
+        window.clearTimeout(this.speechEndStopTimer);
+        this.speechEndStopTimer = null;
+      }
+      if (!this.heardFinalInSession && this.latestInterim.trim()) {
+        onResult({
+          text: this.latestInterim.trim(),
+          isFinal: true,
+          confidence: 0.55,
+        });
+        this.latestInterim = '';
+      } else if (!this.heardFinalInSession) {
+        onError('No transcription captured. Please try speaking for 2-3 seconds.');
+      }
       this.isListening = false;
       console.log('Voice input stopped');
     };
 
-    this.recognition.start();
+    try {
+      this.recognition.start();
+    } catch (error: any) {
+      this.isListening = false;
+      const message = error?.name === 'InvalidStateError'
+        ? 'Voice recognition is already active. Please wait and try again.'
+        : error?.message || 'Unable to start voice input';
+      onError(message);
+    }
   }
 
   /**

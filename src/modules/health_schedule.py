@@ -28,11 +28,42 @@ class HealthScheduleManager:
     def _load(self) -> Dict[str, object]:
         return json.loads(self.schedule_path.read_text(encoding="utf-8"))
 
+    def _save(self, payload: Dict[str, object]) -> None:
+        self.schedule_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
     def get_user_schedule(self, user_id: str) -> Dict[str, List[Dict[str, str]]]:
         payload = self._load()
         users = payload.get("users", {})
         user_schedule = users.get(user_id, {}) if isinstance(users, dict) else {}
         return user_schedule if isinstance(user_schedule, dict) else {}
+
+    def set_user_schedule(self, user_id: str, schedule: Dict[str, List[Dict[str, str]]]) -> None:
+        payload = self._load()
+        users = payload.setdefault("users", {})
+        if not isinstance(users, dict):
+            payload["users"] = {}
+            users = payload["users"]
+        users[user_id] = schedule
+        self._save(payload)
+
+    def create_default_day_plan(self, user_id: str, now: datetime | None = None) -> Dict[str, List[Dict[str, str]]]:
+        current = now or datetime.now()
+        base_hour = max(8, min(10, current.hour + 1))
+        plan = {
+            "medications": [
+                {"time": f"{base_hour:02d}:00", "title": "Morning medicine"},
+                {"time": "20:30", "title": "Night medicine"},
+            ],
+            "meals": [
+                {"time": "13:00", "title": "Lunch"},
+                {"time": "19:00", "title": "Dinner"},
+            ],
+            "exercises": [
+                {"time": "17:30", "title": "Evening walk"},
+            ],
+        }
+        self.set_user_schedule(user_id, plan)
+        return plan
 
     def get_upcoming_items(
         self,

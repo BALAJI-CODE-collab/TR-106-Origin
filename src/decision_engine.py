@@ -77,6 +77,46 @@ class DecisionEngine:
             return f" எனக்கு நினைவில் உள்ளது: {snippets}."
         return f" I remember: {snippets}."
 
+    def _should_add_memory_context(self, user_text: str) -> bool:
+        lowered = user_text.lower()
+        recall_intents = [
+            "remember",
+            "recall",
+            "what did i say",
+            "earlier",
+            "last time",
+            "previous",
+            "before",
+        ]
+        return any(intent in lowered for intent in recall_intents)
+
+    def _should_create_schedule(self, user_text: str) -> bool:
+        lowered = user_text.lower()
+        creation_phrases = [
+            "make a schedule",
+            "create a schedule",
+            "help me to make a schedule",
+            "make schedule for me",
+            "schedule for me",
+            "plan my day",
+            "make a plan",
+            "set a schedule",
+            "build a schedule",
+        ]
+        return any(phrase in lowered for phrase in creation_phrases)
+
+    def _format_created_schedule(self, plan: Dict[str, List[Dict[str, str]]], language: str = 'ta') -> str:
+        items = []
+        for category in ["medications", "meals", "exercises"]:
+            for entry in plan.get(category, []):
+                time = entry.get("time", "")
+                title = entry.get("title", "")
+                if time and title:
+                    items.append(f"{time} - {title}")
+        if language == 'ta':
+            return "இன்றைக்கான உங்கள் அட்டவணையை அமைத்துவிட்டேன்: " + "; ".join(items) + "."
+        return "I have created a simple schedule for today: " + "; ".join(items) + "."
+
     def _base_chatbot_response(self, user_text: str) -> str:
         lowered = user_text.lower()
         if "medicine" in lowered or "medication" in lowered:
@@ -95,6 +135,28 @@ class DecisionEngine:
     def _choose(self, options: List[str]) -> str:
         return random.choice(options) if options else ""
 
+    def _is_gratitude(self, text: str) -> bool:
+        lowered = text.lower().strip()
+        return lowered in {"thanks", "thank you", "thankyou", "thx", "appreciate it"} or "thank" in lowered
+
+    def _is_identity_question(self, text: str) -> bool:
+        lowered = text.lower().strip()
+        return any(
+            phrase in lowered
+            for phrase in ["what is your name", "who are you", "what are you", "tell me your name"]
+        )
+
+    def _is_capability_question(self, text: str) -> bool:
+        lowered = text.lower().strip()
+        return any(
+            phrase in lowered
+            for phrase in ["what can you do", "how can you help", "what do you do", "help me", "what are you able to do"]
+        )
+
+    def _is_farewell(self, text: str) -> bool:
+        lowered = text.lower().strip()
+        return lowered in {"bye", "goodbye", "see you", "see you later", "good night"} or lowered.startswith("bye ")
+
     def _companion_response(self, user_text: str, user_id: str, now: datetime, language: str = 'ta') -> str:
         lowered = user_text.lower().strip()
         compact = re.sub(r"\s+", " ", lowered)
@@ -103,7 +165,7 @@ class DecisionEngine:
 
         greetings = ["hi", "hello", "hey", "good morning", "good evening"]
         wellbeing = ["how are you", "how do you feel", "are you there"]
-        schedule = ["schedule", "plan", "today", "what next", "reminder"]
+        schedule = ["schedule", "plan", "what next", "reminder", "calendar"]
         medication = ["medicine", "medication", "tablet", "pill", "dose"]
         food = ["food", "meal", "eat", "diet", "hungry", "drink"]
         exercise = ["walk", "exercise", "yoga", "stretch", "activity"]
@@ -139,6 +201,26 @@ class DecisionEngine:
                 "I am here for you. Tell me one thing you want help with right now.",
             ])
 
+        if self._is_identity_question(compact):
+            if use_tamil:
+                return "நான் உங்கள் தினசரி உதவி துணை. நினைவூட்டல், உரையாடல், அட்டவணை, மற்றும் நலன் பற்றிய உதவிக்கு நான் இருக்கிறேன்."
+            return "I am your daily care companion. I can help with reminders, conversation, schedules, and wellbeing support."
+
+        if self._is_capability_question(compact):
+            if use_tamil:
+                return "நான் உங்களுக்கு பேச உதவுவேன், நினைவூட்டல்கள் அமைப்பேன், அட்டவணை உருவாக்குவேன், மற்றும் தேவையானபோது அமைதியாக வழிகாட்டுவேன்."
+            return "I can talk with you, set reminders, create schedules, and guide you gently when you need support."
+
+        if self._is_gratitude(compact):
+            if use_tamil:
+                return "உங்களுக்கு உதவியது என் மகிழ்ச்சி. இன்னும் ஏதாவது வேண்டுமென்றால் சொல்லுங்கள்."
+            return "You are very welcome. I am happy to help anytime."
+
+        if self._is_farewell(compact):
+            if use_tamil:
+                return "சரி, கவனமாக இருங்கள். பிறகு மீண்டும் பேசலாம்."
+            return "Take care. I will be here whenever you come back."
+
         if self._contains_any(compact, wellbeing):
             if use_tamil:
                 return self._choose([
@@ -152,6 +234,10 @@ class DecisionEngine:
                 "I am with you. Would you like mood support, reminders, or a simple chat?",
             ])
 
+        if self._should_create_schedule(user_text):
+            plan = self.schedule.create_default_day_plan(user_id=user_id, now=now)
+            return self._format_created_schedule(plan, language=language)
+
         if self._contains_any(compact, schedule):
             upcoming = self.schedule.get_upcoming_items(user_id=user_id, now=now)
             if upcoming:
@@ -160,8 +246,16 @@ class DecisionEngine:
                     return f"உங்களின் அடுத்த செயல் {first.title}, நேரம் {first.time}. இன்று மீதமுள்ள அட்டவணையையும் சொல்வேனா?"
                 return f"Your next plan is {first.title} at {first.time}. Would you like me to walk you through the rest of your day?"
             if use_tamil:
-                return "இப்போது அட்டவணையில் உருப்படி இல்லை. இன்றைக்கான நினைவூட்டலை சேர்க்க உதவவா?"
-            return "I do not see a scheduled item right now. Would you like me to help create a reminder for today?"
+                return self._choose([
+                    "இப்போது அட்டவணையில் உருப்படி இல்லை. இன்றைக்கு ஒரு திட்டத்தை அமைக்கலாம்: காலை மருந்து, மதிய உணவு, மாலை நடை, இரவு மருந்து.",
+                    "உங்களுக்காக இன்று ஒரு எளிய திட்டத்தை உருவாக்கலாம்: காலை மருந்து, மதிய உணவு, மாலை நடை, இரவு மருந்து நினைவூட்டல்.",
+                ])
+            return (
+                self._choose([
+                    "I do not see a saved schedule yet. I can build one for you now: morning medicine, lunch, evening walk, and night medicine.",
+                    "There is no saved schedule at the moment. I can set up a simple day plan now: morning medicine, lunch, evening walk, and night medicine.",
+                ])
+            )
 
         if self._contains_any(compact, medication):
             if use_tamil:
@@ -218,10 +312,8 @@ class DecisionEngine:
 
         if compact.endswith("?") or self._contains_any(compact, ["what", "why", "how", "when", "where"]):
             if use_tamil:
-                return "அது நல்ல கேள்வி. தெளிவாகவும் எளிமையாகவும் பதில் சொல்கிறேன், தேவைப்பட்டால் சிறிய படிகளாக உடைத்துச் செய்வோம்."
-            return (
-                "That is a thoughtful question. I will help with a clear and simple answer, and if needed, we can break it into small steps together."
-            )
+                return "அது நல்ல கேள்வி. அதை சிறிது மேலும் குறிப்பாக சொன்னால், நான் நேரடியாகவும் தெளிவாகவும் பதில் சொல்ல முடியும்."
+            return "That is a thoughtful question. If you make it a little more specific, I can answer it directly and clearly."
 
         if use_tamil:
             return self._choose([
@@ -232,7 +324,7 @@ class DecisionEngine:
         return self._choose([
             "I understand. I am your daily companion, and I can help with reminders, mood support, health routines, and conversation anytime.",
             "I am with you. We can take one practical step now based on what you need.",
-            "I am ready to help in a personal way. Tell me what matters most right now.",
+            "I am ready to help in a personal way. Tell me the exact thing you want me to do.",
         ])
 
     def _detect_disease_intent(self, user_text: str) -> str:
@@ -268,6 +360,17 @@ class DecisionEngine:
             if isinstance(speech_rate, (int, float)) and speech_rate < 90:
                 score = min(0.95, score + 0.1)
 
+            tremor_metric = cognitive_data.get("parkinson_tremor")
+            coordination_metric = cognitive_data.get("parkinson_coordination")
+            reaction_metric = cognitive_data.get("parkinson_reaction")
+
+            if isinstance(tremor_metric, (int, float)):
+                score = min(0.95, score + min(0.22, max(0.0, float(tremor_metric)) / 100.0 * 0.22))
+            if isinstance(coordination_metric, (int, float)):
+                score = min(0.95, score + min(0.16, max(0.0, 100.0 - float(coordination_metric)) / 100.0 * 0.16))
+            if isinstance(reaction_metric, (int, float)) and float(reaction_metric) < 65:
+                score = min(0.95, score + 0.08)
+
         risk_level = "low" if score < 0.35 else "moderate" if score < 0.65 else "high"
         confidence = min(0.9, 0.55 + (0.07 * gait_terms) + (0.05 if pause_markers > 0 else 0.0))
 
@@ -282,6 +385,9 @@ class DecisionEngine:
                     "repetition_count": repetition_count,
                     "vocabulary_diversity": round(unique_ratio, 3),
                     "motor_term_hits": gait_terms,
+                    "parkinson_tremor": cognitive_data.get("parkinson_tremor") if isinstance(cognitive_data, dict) else None,
+                    "parkinson_coordination": cognitive_data.get("parkinson_coordination") if isinstance(cognitive_data, dict) else None,
+                    "parkinson_reaction": cognitive_data.get("parkinson_reaction") if isinstance(cognitive_data, dict) else None,
                 },
             },
             "error": None,
@@ -320,7 +426,8 @@ class DecisionEngine:
             enriched = response_seed
         else:
             enriched = self._adapt_tone(response_seed, emotion.label, language=language)
-            enriched += self._compose_memory_context(memories, language=language)
+            if self._should_add_memory_context(user_text):
+                enriched += self._compose_memory_context(memories, language=language)
 
         if upcoming_items and not uses_external_llm:
             first_item = upcoming_items[0]

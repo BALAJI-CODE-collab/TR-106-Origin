@@ -47,18 +47,20 @@ export const ReminderPanel: React.FC<ReminderPanelProps> = ({
 }) => {
   const pendingReminders = reminders.filter((r) => !r.completed);
   const completedCount = reminders.filter((r) => r.completed).length;
+  const progressPercent = reminders.length > 0 ? (completedCount / reminders.length) * 100 : 0;
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6">
+    <div className="rounded-[28px] border border-white/10 bg-white/95 p-6 shadow-2xl backdrop-blur-xl">
       {/* Header */}
       <div className="mb-6">
-        <h3 className="mb-2 text-2xl font-bold tracking-wide text-gray-800">Daily Reminders</h3>
-        <p className="text-sm text-gray-600">
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Daily Check-ins</p>
+        <h3 className="mb-2 mt-1 text-2xl font-bold tracking-wide text-slate-800">Friendly Reminders</h3>
+        <p className="text-sm text-slate-600">
           {completedCount} of {reminders.length} completed
         </p>
-        <div className="w-full bg-gray-200 rounded-full h-3 mt-2 overflow-hidden">
+        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-slate-200">
           <motion.div
-            animate={{ width: `${(completedCount / reminders.length) * 100}%` }}
+            animate={{ width: `${progressPercent}%` }}
             transition={{ duration: 0.5 }}
             className="h-full bg-gradient-to-r from-green-400 to-blue-600"
           />
@@ -66,14 +68,14 @@ export const ReminderPanel: React.FC<ReminderPanelProps> = ({
       </div>
 
       {/* Reminders List */}
-      <div className="space-y-3">
+      <div className="grid gap-3">
         {pendingReminders.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center py-8"
+            className="rounded-2xl border border-slate-200 bg-slate-50 py-8 text-center"
           >
-            <p className="text-gray-600 text-lg font-semibold">All done for today!</p>
+            <p className="text-lg font-semibold text-slate-700">All done for today. Nice work.</p>
           </motion.div>
         ) : (
           pendingReminders.map((reminder, idx) => (
@@ -83,9 +85,9 @@ export const ReminderPanel: React.FC<ReminderPanelProps> = ({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
               className={`
-                flex items-center gap-4 p-4 rounded-xl text-white
+                flex items-center gap-4 rounded-2xl p-4 text-white shadow-md transition
                 bg-gradient-to-r ${getCategoryColor(reminder.category)}
-                cursor-pointer hover:shadow-lg transition
+                cursor-pointer hover:-translate-y-0.5 hover:shadow-xl
               `}
               onClick={() => onCompleteReminder(reminder.id)}
             >
@@ -113,15 +115,15 @@ export const ReminderPanel: React.FC<ReminderPanelProps> = ({
 
         {/* Completed Reminders */}
         {completedCount > 0 && (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <p className="mb-3 text-sm font-semibold tracking-wide text-gray-600">Completed Today</p>
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <p className="mb-3 text-sm font-semibold tracking-wide text-slate-600">Completed Today</p>
             <div className="space-y-2">
               {reminders
                 .filter((r) => r.completed)
                 .map((reminder) => (
                   <div
                     key={reminder.id}
-                    className="flex items-center gap-3 text-gray-500 opacity-75"
+                    className="flex items-center gap-3 text-slate-500 opacity-80"
                   >
                     <CheckCircle className="w-5 h-5 text-green-500" />
                     <span className="text-sm line-through">{reminder.title}</span>
